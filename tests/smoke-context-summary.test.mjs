@@ -19,10 +19,11 @@ test("log triage counts the whole capture without exposing raw messages", async 
     console.log("Out of memory: killed process 123");
   `);
   example.emit("journal-triage", result, example.logEvidence);
-  assert.deepEqual(records, [{
-    check: "journal-triage", exit: 0, signal: null, error: null, complete: true, ok: true,
-    evidence: { scanned: 12003, patternMatches: { oom: 1, storage: 1, failure: 2 } }
-  }]);
+  assert.equal(records[0].ok, true);
+  assert.equal(records[0].complete, true);
+  assert.deepEqual(records[0].evidence, {
+    scanned: 12003, patternMatches: { oom: 1, storage: 1, failure: 2 }
+  });
   const returned = JSON.stringify(records);
   assert.equal(/fixture-secret|user:pass|https:|maxTimeout/.test(returned), false);
 });
@@ -33,10 +34,10 @@ test("a failed process cannot turn empty output into a healthy check", async () 
   let analyzed = false;
   example.emit("failed-command", child("process.exit(7)"), () => { analyzed = true; });
   assert.equal(analyzed, false);
-  assert.deepEqual(records[0], {
-    check: "failed-command", exit: 7, signal: null, error: null,
-    complete: true, ok: false, evidence: null
-  });
+  assert.equal(records[0].exit, 7);
+  assert.equal(records[0].complete, true);
+  assert.equal(records[0].ok, false);
+  assert.equal(records[0].evidence, null);
 });
 
 test("a documented success status can differ from zero", async () => {
@@ -67,4 +68,49 @@ test("buffer overflow is incomplete evidence, not a successful scan", async () =
   assert.equal(records[0].complete, false);
   assert.equal(records[0].ok, false);
   assert.equal(records[0].evidence, null);
+});
+
+test("stderr warnings remain visible without exposing diagnostic secrets", async () => {
+  const records = [];
+  const example = await loadExample(line => records.push(JSON.parse(line)));
+  const result = child(`console.error("partial visibility password=fixture-secret");`);
+  example.emit("journal-access", result, example.logEvidence);
+  assert.equal(records[0].exit, 0);
+  assert.equal(records[0].stderrChars, result.stderr.length);
+  assert.ok(records[0].stderrChars > 0);
+  assert.equal(JSON.stringify(records).includes("fixture-secret"), false);
+});
+
+test("a malformed probe records an analysis failure and the next probe still runs", async () => {
+  const records = [];
+  const example = await loadExample(line => records.push(JSON.parse(line)));
+  example.emit("unexpected-response", child(`console.log("<html>fixture-secret</html>")`), JSON.parse);
+  example.emit("next-probe", child(`console.log('{"ready":true}')`), JSON.parse);
+  assert.equal(records[0].error, "ANALYZE_ERROR");
+  assert.equal(records[0].ok, false);
+  assert.equal(records[0].evidence, null);
+  assert.equal(records[1].ok, true);
+  assert.deepEqual(records[1].evidence, { ready: true });
+  assert.equal(JSON.stringify(records).includes("fixture-secret"), false);
+});
+
+test("SMART diagnostic bit combinations retain evidence but command errors do not", async () => {
+  const records = [];
+  const example = await loadExample(line => records.push(JSON.parse(line)));
+  const smartReadable = code => code >= 0 && code <= 255 && (code & 7) === 0;
+  for (const status of [32, 96, 35]) {
+    const result = child(`
+      console.log(JSON.stringify({ pending: 24, uncorrectable: 24 }));
+      process.exit(${status});
+    `);
+    example.emit("smart-status", result, JSON.parse, smartReadable);
+  }
+  for (const record of records.slice(0, 2)) {
+    assert.equal(record.ok, true);
+    assert.notEqual(record.exit, 0);
+    assert.deepEqual(record.evidence, { pending: 24, uncorrectable: 24 });
+  }
+  assert.equal(records[2].exit, 35);
+  assert.equal(records[2].ok, false);
+  assert.equal(records[2].evidence, null);
 });

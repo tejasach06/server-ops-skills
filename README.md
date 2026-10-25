@@ -13,7 +13,7 @@ npm test
 npm run smoke
 ```
 
-`npm test` checks discoverable frontmatter, size limits, and absence of companion skill or Markdown dependencies. Behavioral tests extract the actual JavaScript example from `SKILL.md` and run it against real child processes. They cover large-log summarization, secret exclusion by field selection, command failures, expected nonzero status, timeout, and buffer overflow.
+`npm test` checks discoverable frontmatter, size limits, and absence of companion skill or Markdown dependencies. Behavioral tests execute the actual JavaScript from `SKILL.md` against real child processes. They cover bounded log summaries, diagnostic secrecy, expected nonzero statuses, native SMART bit combinations, analyzer-failure isolation, timeouts, and buffer overflow.
 
 The size limits are 220 lines, 16,000 UTF-8 bytes, and a 4,000-token estimate based on characters divided by four. The estimate is not a model tokenizer count or a billing measurement.
 
@@ -31,13 +31,18 @@ The optional remote smoke runs only `hostname`, `uname -s`, and `uname -r` throu
 
 ## Review before installation
 
-The repository does not install skills, change OMP configuration, uninstall marketplace packages, or publish to GitHub. `SKILL.md` is the complete agent procedure. README, test, and script files are development tools, not runtime reference hops.
+The repository does not install skills, change OMP configuration, uninstall marketplace packages, or publish to GitHub. `SKILL.md` is the complete agent procedure.
 
-1. Review `SKILL.md`, especially repair authority, backup handling, and network access safeguards.
-2. Validate actual host audits against an explicit acceptance checklist. Include unavailable tools, absent privilege, a failed service, and standalone versus clustered Proxmox nodes.
+1. Review `SKILL.md`, including repair authority, backup verification boundaries, and network/SSH trust safeguards.
+2. Check real homelab cases before cutover:
+   - Standalone vs clustered Proxmox: missing `/etc/pve/corosync.conf` is standalone, not a broken cluster.
+   - Alpine/OpenRC: use portable `df -P`, `rc-status --all`, and named service status. Verify native status semantics; an empty `rc-status --crashed` returned exit 1 on the tested guest.
+   - SMART: preserve native health/history bit combinations without treating command/access failures as readable diagnostics. `ok` means analysis succeeded, not that the disk is healthy.
+   - Stale host libraries: check long-lived hypervisor QEMU mappings after host package updates; verify mapped libraries before and after approved guest restarts.
+   - Automation scope: inspect full play/import graphs before Ansible runs; `--limit` restricts target hosts, not action scope.
 3. When installation is approved, copy or link this directory as `server-ops` in the active OMP skill discovery location.
 4. Check competing marketplace/router triggers before cutover. Do not leave two procedures eligible and mistake duplicate loading for a result of this skill.
-5. Retain the prior installed package until the approved cutover and rollback plan are clear. Nothing in this staged repository changes that package.
+5. Retain the prior installed package until cutover and rollback are clear.
 
 ## Compare completed work
 
@@ -52,3 +57,11 @@ Reject an apparent improvement if the new run skipped required checks, hid error
 Edit `SKILL.md` as the single source of operating instructions. Its embedded example is also the source used by the smoke and behavior tests. Keep new instructions tied to a demonstrated operational risk or repeated waste. Run both package commands before review.
 
 The design uses the existing server router, health/security checklists, and host-maintenance procedures as conceptual templates. Runtime use has no dependency on those marketplace skills. Existing environment-level instructions still apply, so staging this skill alone cannot prevent the host from independently loading another mandated skill.
+
+## Gap-closure evidence
+
+Three added regressions failed before the helper fix and passed afterward: stderr visibility without secret leakage, analyzer failure without losing subsequent probes, and SMART native-status combinations. Existing timeout and overflow checks remain in force. Diagnostics are represented by a character count; raw stderr and exception messages stay inside the sandbox.
+
+Read-only live checks exercised portable disk inspection on Alpine CT112, native SMART exit 32 on Proxmox while retaining pending-sector evidence, and a denied-privilege probe followed by a successful independent probe. Ansible import scope, effective transport trust, and dry-run behavior must be inspected before any tasks execute. The staged skill does not repair the existing controller playbooks.
+
+QEMU stop/start, package upgrades, storage removal, backup restore, and matched efficiency trials remain unexercised. No runtime token or latency savings are claimed.

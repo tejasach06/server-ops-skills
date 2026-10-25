@@ -5,7 +5,7 @@ description: Audit, diagnose, or maintain Linux and Proxmox servers. Use for hos
 
 # Server operations
 
-Optimize for a verified result with the fewest useful round trips. Keep audits read-only, batch related probes, and investigate only the branches supported by evidence. This file is the complete skill; load no companion skills or reference documents for its procedures.
+Optimize for a verified result with few useful round trips. Keep audits read-only, batch related probes, and follow evidence. This is the complete skill; no companion skill or reference reads are needed.
 
 ## Scope and safety
 
@@ -26,17 +26,17 @@ Optimize for a verified result with the fewest useful round trips. Keep audits r
 | Network failure | DNS, routes, firewall, listener, application, dependencies. |
 | Maintenance | Baseline, recovery plan, targeted dry run, apply, behavioral verification. |
 
-Run one-host work inline by default. Delegate only when at least two independent substantial slices justify separate startup contexts, or a large read set would crowd the main context. Give workers disjoint ownership and already-verified facts. Do not make each worker repeat discovery or load this skill again. Keep shared mutations with one owner.
+Keep one-host work inline. Delegate only two independent substantial slices or a large read set that would crowd context. Give workers disjoint ownership and verified facts, without repeated discovery or skill reads. Keep shared mutations with one owner.
 
 ## Execute efficiently
 
-1. Discover once. Capture OS, tools, privilege, active services, and interfaces together. Carry those facts into later checks.
-2. Batch related read-only probes, with an exit status for each. Independent probes may run concurrently. Avoid one failing shell command hiding the rest.
-3. Parse complete captured output inside Context-Mode. Emit only the fields needed for the decision. Do not print raw journals, package tables, container inspections, or whole tool-response envelopes.
-4. Follow up only on a finding, incomplete capture, or unresolved acceptance condition. Do not rerun a successful probe for reassurance.
-5. Reuse the bounded pattern below. Change the target and probe, not the execution mechanism. Inspect host-tool schemas only when the calling convention is unknown. Read a response's text field, not duplicate metadata wrappers.
+1. Discover OS, tools, privilege, services, and interfaces once. Reuse the facts.
+2. Batch related read-only probes with a status for each; run independent probes concurrently when useful. An unframed `a; b` sequence reports only the last status. Use separate captures or explicit per-probe status markers.
+3. Parse complete captures inside Context-Mode. Emit decision fields, not raw dumps or response metadata wrappers.
+4. Follow up only on findings, incomplete evidence, or unmet acceptance conditions.
+5. Reuse the helper below; read tool schemas only when the calling convention is unknown.
 
-Use this JavaScript inside `ctx_execute`. The helper retains raw bytes only in the sandbox. `emit` refuses to present failed or truncated capture as a successful check. Log matching is a triage count, not a diagnosis; it emits no raw log messages.
+Use this JavaScript inside `ctx_execute`. Raw bytes stay in the sandbox. `ok` means execution and analysis succeeded, not that the host is healthy. Log patterns are triage counts, not diagnoses.
 
 ```javascript
 const { spawnSync } = require("node:child_process");
@@ -49,11 +49,18 @@ function ssh(host, command, timeout = 30_000) {
 
 function emit(check, result, analyze, accepted = [0]) {
   const complete = !result.error && result.status !== null;
-  const ok = complete && accepted.includes(result.status);
+  let ok = false, evidence = null, error = result.error?.code || null;
+  try {
+    ok = complete && (typeof accepted === "function"
+      ? accepted(result.status) : accepted.includes(result.status));
+    if (ok) evidence = analyze(result.stdout || "");
+  } catch {
+    ok = false;
+    error = "ANALYZE_ERROR";
+  }
   console.log(JSON.stringify({
     check, exit: result.status, signal: result.signal || null,
-    error: result.error?.code || null, complete, ok,
-    evidence: ok ? analyze(result.stdout || "") : null
+    error, complete, ok, stderrChars: (result.stderr || "").length, evidence
   }));
 }
 
@@ -76,9 +83,9 @@ function logEvidence(text) {
 }
 ```
 
-Call `emit` with a check-specific analyzer returning whitelisted fields. For journal triage, pass `logEvidence`. Do not pass raw stdout through as evidence. For a necessary log excerpt, select the relevant event and remove credentials, URLs, headers, and personal data first. Unrecognized output is unknown, not healthy. On timeout or buffer overflow, narrow or stream that probe and finish the unaffected checks.
+Pass a whitelisting analyzer to `emit`, or `logEvidence` for log counts. When `stderrChars` is nonzero, inspect stderr inside the sandbox and classify warnings or limited visibility before concluding; raw diagnostics and exception text can contain secrets. Empty or unrecognized output is not healthy. After timeout, overflow, or analysis failure, narrow that probe and finish unaffected checks.
 
-On Windows, invoke executable binaries directly. In Context-Mode JavaScript, pass local `cwd` to `spawnSync`; the tool's `cwd` option applies to its shell mode. A successful launch is not proof that the remote command succeeded.
+On Windows, invoke binaries directly and pass local `cwd` to `spawnSync`; Context-Mode's `cwd` applies to shell mode. Launch success does not prove remote success.
 
 ## Discover once
 
@@ -88,12 +95,12 @@ Use `BatchMode=yes` and the configured SSH trust policy. Do not disable host-key
 
 ## Health
 
-- Resources: use `df -P` excluding virtual and overlay filesystems, `free -b`, `uptime`, and `nproc`. Flag disk use above 85% as WARN, above 95% as CRITICAL; memory available below 10%, swap above 50%, or sustained 15-minute load above CPU count as WARN. Compare against workload context.
-- Services: inspect system and relevant user failed units, restart history, and actual application or protocol responses. Distinguish process-running, endpoint-ready, and dependency-working evidence. Probe dependencies from the application's runtime and trust store when host behavior differs.
+- Resources: use portable `df -P`; inspect native options before excluding virtual filesystems. BusyBox lacks GNU `df -x`; filter using available mount metadata instead. Inspect `free` flags or `/proc/meminfo`. Disk use >85% is WARN, >95% CRITICAL; available memory <10%, swap >50%, or 15-minute load above CPU count is WARN, subject to workload context.
+- Services: inspect failed units, restart history, actual endpoints, and dependencies. On systemd use `systemctl`/`journalctl`; on OpenRC use `rc-status --all`, inspect crashed service markers, and query `rc-service <name> status`. Discover syslog files or `logread` if available. Verify native exit semantics. Probe dependencies using the application's runtime and trust store.
 - Containers: use the service-owning account and engine. Whitelist name, image digest/version, state, healthcheck state, restarts, OOM state, resource limits, privilege, network mode, and mount metadata. Missing healthchecks are not an outage. Rootless container root is not host root.
-- Logs: inspect retained kernel errors and relevant service failures once. Count OOM and storage failures; inspect event context before reporting a problem. Record time window and retention gaps. A request field named `maxTimeout` is not a timeout event.
-- Hardware: if tools exist, read SMART health, error counters, and current temperatures. Separate cumulative errors from present faults. Vendor raw attributes are not percentages without vendor evidence. Report unavailable checks.
-- Time and kernel: check time synchronization and running versus newest installed kernel. Detect stale service code with an available read-only helper; report failed helpers as unknown. Do not restart or reboot during inspection.
+- Logs: read retained kernel and relevant service errors once, using the host's logger. Preserve event context and retention limits. `maxTimeout` is not a timeout event.
+- Hardware: read SMART and temperatures when tools exist; distinguish cumulative errors from current faults. Decode `smartctl`'s exit bitmask. To retain readable diagnostics, pass `code => code >= 0 && code <= 255 && (code & 7) === 0` to `emit`; bits 0–2 mean command/access/data errors, bits 3–7 health/history findings. Preserve the native code, assess attributes, and never equate parsed evidence with a healthy disk. Vendor raw values need vendor interpretation.
+- Time and kernel: use the installed time client and compare running/installed kernels. Check stale service and affected long-lived QEMU mappings after host-library updates, mapping each PID to its guest. A reboot inside a guest need not replace its host process; obtain approval for a required stop/start and verify mappings afterward. Report failed helpers as unknown.
 - TLS: inspect certificate expiry for discovered TLS services, including application trust failures. Do not bypass verification to claim success.
 
 ### Packages
@@ -111,9 +118,9 @@ Inspect effective automatic-update configuration and recent successful installat
 
 ### Backups
 
-Discover jobs, mounts, completed sets, and last successful run. Report data coverage, destination, age against the actual schedule, retention tiers, integrity evidence, and restore-test status. A recent file or successful timer alone does not prove a usable backup. Inspect all configured daily, weekly, and monthly tiers independently.
+Discover backup jobs, destinations, completed sets, last success, coverage, and retention tiers. Check configured daily, weekly, and monthly tiers independently against their schedules. A fresh file or successful timer is not recovery proof.
 
-Verify a checksum or archive readability when safe. Mark full-host coverage, offline copies, and immutable replication unknown unless observed. Do not trigger backup, restore, scrub, or write-based disk tests during an audit.
+Verify checksum or archive structure only when safe; preserve restore-test status separately. Mark off-host, full-host, offline, and immutable coverage unknown unless observed. Do not trigger backups, restores, scrubs, or write-based tests during an audit.
 
 ## Security
 
@@ -136,26 +143,26 @@ Before changing network or SSH policy, retain the current session and recovery a
 
 Collect bounded `pveversion -v`, `pvesm status`, `qm list`, `pct list`, failed units, and cluster/quorum state when cluster configuration exists. A standalone node without cluster configuration is not a broken cluster.
 
-Inspect applicable filesystem, thin-pool, ZFS, SMART, replication, and backup evidence. For an affected guest, inspect state, lock, task result, resource dependencies, and recovery state. Whitelist guest configuration fields; cloud-init and storage configuration can contain credentials.
+Inspect applicable filesystem, thin-pool, ZFS, SMART, replication, and backup evidence. For affected guests inspect state, locks, task results, and dependencies. Whitelist configuration; cloud-init and storage values can contain credentials.
 
-Before maintenance, check quorum, storage health, recent backups, active migration/replication, and affected workloads. Simulate the package plan. Ask before node reboot; afterward verify node reachability, quorum where applicable, storage, running kernel, and affected guests. Require explicit approval and a verified recovery path before guest deletion, destructive storage action, or irreversible migration.
+Before maintenance, check quorum, storage, backups, active migrations/replication, and workloads. Simulate packages; verify affected guests afterward. Ask before node reboot and verify return, storage, quorum, and kernel. Before destructive storage/guest work, map volume → physical devices → guest attachments/mounts/users and require approval plus recovery evidence. For failing sources, avoid automatic mounts, journal replay, repair, or heavy reads; preserve originals until recovery acceptance.
 
 ## Maintain and verify
 
-1. State the named change, intended invariant, and rollback path. Capture baseline and inspect existing automation/configuration ownership.
-2. Prefer the existing Ansible playbook. Verify inventory and privilege, run syntax checking, then targeted `--check --diff`. Protect sensitive diffs; identify tasks that cannot simulate.
-3. Preserve unversioned configuration or an atomic rollback. Apply only to the requested host/group. Require Ansible `failed=0` and `unreachable=0`.
-4. For database/container upgrades, make a consistent backup and validate staged databases before schema migration. Preserve rollback-compatible image/config/data versions. Never copy a live SQLite main file without its consistency mechanism.
-5. Exercise the changed path and inspect errors plus unrelated critical services. A play recap, listener, process state, or checksum is not alone proof of application behavior or recoverability.
+1. State the change, invariant, rollback, baseline, and configuration owner.
+2. Inspect the complete play/import graph and `--list-hosts` before selecting existing Ansible automation. A host limit does not constrain action scope; choose security-only tasks for security-only requests.
+3. Before simulation inspect effective inventory, target owner/UID/user-manager access, and controller-to-target host-key policy. Review skipped discovery, shell/command tasks, and forced `check_mode: false` tasks; only verified read-only discovery may run during an audit. Then syntax-check and use targeted `--check --diff` only where safe and meaningful, with sensitive diffs suppressed.
+4. Preserve unversioned state or atomic rollback. Apply only the named scope; require `failed=0`, `unreachable=0`. For database/container upgrades, validate a consistent staged backup and retain compatible image/config/data rollback. Do not copy a live SQLite main file alone or prune rollback images prematurely.
+5. Exercise the changed path and unrelated critical services. Process state, a play recap, or a checksum alone does not prove application behavior or recoverability.
 
 Use graceful service operations and specific PIDs. Do not run blanket process-name termination against the session host. Recheck mutated state once; repeat further only if the result is uncertain or failed.
 
 ## Report and stop
 
-Lead with the conclusion, target, verified OS, scope, and read-only/change status. Group populated findings by CRITICAL, WARN, and INFO. Each finding needs concrete evidence, consequence, and the smallest fix. Include important healthy checks, behavioral verification, rollback state for changes, and explicit unverified coverage. Avoid repeating the same evidence in several tables.
+Lead with conclusion, target/OS, scope, and read-only/change status. Group findings by CRITICAL, WARN, INFO; give evidence, consequence, and the smallest fix. Include healthy checks, behavioral verification, rollback state, and missing coverage. State evidence once.
 
 Stop when the requested checks or repair acceptance conditions are satisfied. Keep investigation separate from remediation. Do not create audit files, log entries, memory records, or follow-up work unless requested or required by the environment.
 
 ## Evaluate efficiency
 
-Judge completed work, not prompt length alone. Compare matched requests and coverage with recorded main-agent plus subagent input, cache reads, output, turns, tool calls, elapsed time, retry/failure counts, and cost basis. State model, cache, host-state, and task-scope differences. Character/byte estimates describe this file, not measured billing or proven savings. Without a matched control, causal savings remain unproven.
+Compare matched requests and coverage using recorded main-agent plus worker input, cache reads, output, turns, calls, elapsed time, retries, failures, and cost basis. State model, cache, host-state, and scope differences. File-size estimates are not billing or runtime savings; causal claims need a matched control.
