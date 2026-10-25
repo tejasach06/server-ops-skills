@@ -5,7 +5,7 @@ description: Audit, diagnose, or maintain Linux and Proxmox servers. Use for hos
 
 # Server operations
 
-Optimize for a verified result with few useful round trips. Keep audits read-only, batch related probes, and follow evidence. This is the complete skill; no companion skill or reference reads are needed.
+Optimize for a verified result with few round trips, not fewer safeguards. Keep audits read-only, batch relevant probes, and follow evidence. Complete skill; no companion skill needed.
 
 ## Scope and safety
 
@@ -14,6 +14,18 @@ Optimize for a verified result with few useful round trips. Keep audits read-onl
 - Preserve access, unrelated services, and recovery paths. Do not weaken SSH, TLS verification, SELinux, AppArmor, or a firewall to make a check pass.
 - Use Context-Mode for uncertain or large output. Keep credentials, hashes, environment dumps, private keys, and full application configuration out of returned text.
 - Use existing Ansible automation for repeatable changes. Do not hardcode homelab addresses, credentials, controller paths, or service lists in this skill.
+- Preserve unrelated working-tree changes. Never reset or check out files to manufacture a clean tree.
+
+## Clarify the goal first
+
+Before discovery, resolve target, outcome, owning layer, authorized scope/policy, and observable acceptance:
+
+- Ask clarifying questions until no consequential choice depends on guessed intent. Batch unresolved choices with concrete tradeoffs; ask again when an answer or scope correction leaves another choice open.
+- Derive addresses, identity, ownership, and tooling from memory/inventory and narrow read-only checks; ask only for intent. Never infer an address from a VM ID.
+- Separate guest OS, VM/NIC, hypervisor, and cluster scope. If firewall layer remains unspecified, ask UFW/firewalld versus Proxmox before probing either. A scope correction does not select a layer. A named VM permits no unrelated guest inspection or host/cluster mutation.
+- For access policy, obtain the allowed client/network → service matrix. Listening does not authorize global or whole-subnet exposure.
+- Briefly restate the goal and exclusions, then act unless new evidence introduces a material choice.
+- Once intent is explicit, proceed with targeted discovery; do not re-ask answered questions. Reconcile new findings with the policy before writes.
 
 ## Select work
 
@@ -26,14 +38,14 @@ Optimize for a verified result with few useful round trips. Keep audits read-onl
 | Network failure | DNS, routes, firewall, listener, application, dependencies. |
 | Maintenance | Baseline, recovery plan, targeted dry run, apply, behavioral verification. |
 
-Keep one-host work inline. Delegate only two independent substantial slices or a large read set that would crowd context. Give workers disjoint ownership and verified facts, without repeated discovery or skill reads. Keep shared mutations with one owner.
+Keep single-host work inline. Delegate only two independent substantial slices or large read sets. Give workers disjoint ownership and verified facts without repeated discovery. Keep shared mutations with one owner.
 
 ## Execute efficiently
 
-1. Discover OS, tools, privilege, services, and interfaces once. Reuse the facts.
+1. Discover only the OS, tools, privilege, services, and interfaces required by the resolved goal, once. Reuse facts and earlier probe results; keep a short list of unanswered decision fields.
 2. Batch related read-only probes with a status for each; run independent probes concurrently when useful. An unframed `a; b` sequence reports only the last status. Use separate captures or explicit per-probe status markers.
 3. Parse complete captures inside Context-Mode. Emit decision fields, not raw dumps or response metadata wrappers.
-4. Follow up only on findings, incomplete evidence, or unmet acceptance conditions.
+4. Follow up only on findings, incomplete evidence, or unmet acceptance conditions. Once a decision field is answered, stop searching for it; do not browse histories, unrelated projects, sibling guests, or hardening scripts to infer user intent.
 5. Reuse the helper below; read tool schemas only when the calling convention is unknown.
 
 Use this JavaScript inside `ctx_execute`. Raw bytes stay in the sandbox. `ok` means execution and analysis succeeded, not that the host is healthy. Log patterns are triage counts, not diagnoses.
@@ -83,53 +95,50 @@ function logEvidence(text) {
 }
 ```
 
-Pass a whitelisting analyzer to `emit`, or `logEvidence` for log counts. When `stderrChars` is nonzero, inspect stderr inside the sandbox and classify warnings or limited visibility before concluding; raw diagnostics and exception text can contain secrets. Empty or unrecognized output is not healthy. After timeout, overflow, or analysis failure, narrow that probe and finish unaffected checks.
+Pass a whitelisting analyzer to `emit`, or `logEvidence` for counts. When `stderrChars` > 0, inspect stderr in sandbox and classify warnings before concluding; diagnostics can contain secrets. Empty/unrecognized output is not healthy. On timeout, overflow, or parse failure, narrow that probe and finish unaffected checks.
 
-On Windows, invoke binaries directly and pass local `cwd` to `spawnSync`; Context-Mode's `cwd` applies to shell mode. Launch success does not prove remote success.
+Do not hand-interpolate multi-line shell/regex code into JSON args for `ctx_execute`; unescaped quotes or newlines cause parse errors. Use single-line commands, stream complex scripts via stdin/heredocs in the sandbox, or use `eval` with JSON serialization.
 
+On Windows, invoke binaries directly with local `cwd` in `spawnSync`; Context-Mode's `cwd` applies to shell mode. Launch success does not prove remote success.
 ## Discover once
 
-Batch hostname, `/etc/os-release`, `id`, `sudo -n true`, interface addresses, routes, uptime, init system, and available package, firewall, and container tools. Preserve the sudo probe's own exit status. Detect Proxmox via `pveversion`; virtualization alone does not establish a Proxmox node.
+For broad audits, batch hostname, `/etc/os-release`, `id`, `sudo -n true`, interface addresses, routes, uptime, init system, and package/firewall/container tools. For a named repair, collect only the required subset. Preserve sudo probe exit status. Detect Proxmox via `pveversion`; virtualization alone does not make a node Proxmox. For multi-node tasks, inspect configured controller inventory first to establish topology before target probes.
 
-Use `BatchMode=yes` and the configured SSH trust policy. Do not disable host-key checks. If privilege is unavailable, complete unprivileged checks and name precisely what remains unverified. Do not install audit utilities or refresh package metadata during an audit.
+Use `BatchMode=yes` and configured SSH trust. Do not disable host-key checks. If unprivileged, complete available checks and name unverified items precisely. Do not install audit tools or refresh package metadata during audits.
 
 ## Health
 
-- Resources: use portable `df -P`; inspect native options before excluding virtual filesystems. BusyBox lacks GNU `df -x`; filter using available mount metadata instead. Inspect `free` flags or `/proc/meminfo`. Disk use >85% is WARN, >95% CRITICAL; available memory <10%, swap >50%, or 15-minute load above CPU count is WARN, subject to workload context.
-- Services: inspect failed units, restart history, actual endpoints, and dependencies. On systemd use `systemctl`/`journalctl`; on OpenRC use `rc-status --all`, inspect crashed service markers, and query `rc-service <name> status`. Discover syslog files or `logread` if available. Verify native exit semantics. Probe dependencies using the application's runtime and trust store.
-- Containers: use the service-owning account and engine. Whitelist name, image digest/version, state, healthcheck state, restarts, OOM state, resource limits, privilege, network mode, and mount metadata. Missing healthchecks are not an outage. Rootless container root is not host root.
-- Logs: read retained kernel and relevant service errors once, using the host's logger. Preserve event context and retention limits. `maxTimeout` is not a timeout event.
-- Hardware: read SMART and temperatures when tools exist; distinguish cumulative errors from current faults. Decode `smartctl`'s exit bitmask. To retain readable diagnostics, pass `code => code >= 0 && code <= 255 && (code & 7) === 0` to `emit`; bits 0–2 mean command/access/data errors, bits 3–7 health/history findings. Preserve the native code, assess attributes, and never equate parsed evidence with a healthy disk. Vendor raw values need vendor interpretation.
-- Time and kernel: use the installed time client and compare running/installed kernels. Check stale service and affected long-lived QEMU mappings after host-library updates, mapping each PID to its guest. A reboot inside a guest need not replace its host process; obtain approval for a required stop/start and verify mappings afterward. Report failed helpers as unknown.
-- TLS: inspect certificate expiry for discovered TLS services, including application trust failures. Do not bypass verification to claim success.
+- Resources: use portable `df -P`; inspect native options before excluding filesystems. Disk >85% is WARN, >95% CRITICAL; available memory <10%, swap >50%, or 15-minute load above CPU count is WARN, subject to workload.
+- Services: inspect failed units, restarts, endpoints, and dependencies. Use systemd or OpenRC-native commands and verify their exit semantics. Probe dependencies with the application's runtime and trust store.
+- Containers: use the owning account and engine. Inspect identity/version, state/health, restarts/OOM, limits, privilege, network, and mounts. Missing healthchecks are not outages; rootless container root is not host root.
+- Logs: read retained kernel and relevant service errors once with event context and retention limits. `maxTimeout` is not a timeout event.
+- Hardware: inspect SMART/temperature when available. Decode native `smartctl` bits: pass `code => code >= 0 && code <= 255 && (code & 7) === 0` to `emit`; bits 0–2 are command/access/data errors, 3–7 health/history. Assess attributes; vendor raw values need vendor meaning.
+- Time/kernel: compare running and installed kernels. After host-library updates, map stale QEMU process libraries to guests. Guest reboot need not replace its host process; approval is required for stop/start.
+- TLS: inspect discovered certificates and application trust failures; never bypass verification as proof.
 
 ### Packages
 
-Use existing cache only. Report metadata age and distinguish pending package count, security-tagged packages, and vulnerability count. Verify manager/version flags before use; report unavailable security classification honestly.
-
-| Detected manager | Read-only approach |
-|---|---|
-| DNF5 | `dnf5 -C -q repoquery --upgrades --latest-limit=1`; add `--security` for security-tagged candidates. |
-| DNF4 | `dnf -C -q check-update`; exit 100 means updates exist. Use cached `updateinfo` for advisory classification. |
-| APT | `apt-get --simulate upgrade`; analyze candidate origins from existing lists for security classification, not package names alone. |
-| Other | Inspect installed manager help for simulation and no-refresh flags. State unsupported coverage rather than inventing equivalents. |
-
-Inspect effective automatic-update configuration and recent successful installation, not only timer enablement. Metadata refresh is not installation. External automation may own patching; do not assume absence from local timers means no managed patch process.
+Use cached metadata only; report its age, pending updates, security-tagged candidates, and vulnerabilities separately. Verify supported no-refresh/simulation flags: DNF5 `dnf5 -C -q repoquery --upgrades --latest-limit=1` (`--security` for advisories), DNF4 `dnf -C -q check-update` (100 means updates), APT `apt-get --simulate upgrade` plus candidate origins. State unsupported classification. Inspect effective auto-update policy and recent installs; metadata refresh is not installation.
 
 ### Backups
 
-Discover backup jobs, destinations, completed sets, last success, coverage, and retention tiers. Check configured daily, weekly, and monthly tiers independently against their schedules. A fresh file or successful timer is not recovery proof.
-
-Verify checksum or archive structure only when safe; preserve restore-test status separately. Mark off-host, full-host, offline, and immutable coverage unknown unless observed. Do not trigger backups, restores, scrubs, or write-based tests during an audit.
+Discover backup jobs, destinations, completed sets, last success, coverage, and each retention tier. Fresh files/timers are not recovery proof. Safely validate checksum/archive structure; report restore-test, off-host, full-host, offline, and immutable coverage separately. Audits do not trigger backups, restores, scrubs, or writes.
 
 ## Security
 
-- SSH: validate syntax and inspect effective `sshd -T`, including `-C` for the real user/source and applicable Match rules. Check password, keyboard-interactive, root policy, authentication methods, weak algorithms, and PAM lockout. Keep account/session PAM separate from password authentication.
-- Privileges: inspect sudo grants, UID 0 accounts, system login shells, and empty password fields by account name/status only. Never emit password hashes. An application owner's unrestricted sudo is a host-account escalation risk, not proof that container execution already grants host root.
-- Firewall: identify firewalld, UFW, native nftables, and compatibility layers. Trace hooks, zones, interface/source assignment, and final verdicts. A base `policy accept` can still reject later. Compare runtime and persistent policy and check for competing owners.
-- Exposure: map wildcard listeners to processes and firewall allowances. Distinguish loopback, LAN, VPN, and WAN evidence. Verify allowed and disallowed source paths where available. Check protected application endpoints reject unauthenticated requests; public readiness endpoints are not authentication bypasses.
-- Confinement: inspect SELinux/AppArmor enforcement and relevant process labels. Check ASLR, forwarding, redirects, protected links, ptrace, dumps, and kernel log/address controls. Explain a concrete risk; do not present optional hardening or platform defaults as established vulnerabilities.
-- Files: inspect sensitive ownership/modes, cron paths, and bounded local scans for world-writable system files, unowned files, and SUID/SGID programs. Package ownership is not integrity verification. Preserve real scan failures and coverage exclusions.
+- SSH: validate syntax and effective `sshd -T`, including real-context `-C` Match rules. Check password/keyboard-interactive/root policy, methods, algorithms, and PAM lockout.
+- Privileges: inspect sudo, UID 0 accounts, login shells, and empty-password account status without hashes. Unrestricted application-owner sudo is host escalation risk, not proof containers already grant root.
+- Firewall: identify firewalld, UFW, nftables, and compatibility layers; trace hooks, assignments, verdicts, persistence, and competing owners. Base `accept` can still reject later.
+- Exposure: map wildcard listeners to processes and allowances; distinguish loopback, LAN, VPN, and WAN. Check protected endpoints reject unauthenticated requests.
+- Confinement/files: inspect SELinux/AppArmor, relevant labels, material sysctls, sensitive modes, cron paths, and bounded world-writable/unowned/SUID scans. Explain concrete risk; package ownership is not integrity proof.
+
+### Firewall changes
+
+1. Confirm layer and allowed source/service matrix. Inspect relevant listeners, IPv4/IPv6, effective/persistent policy, and competing owners once. Query rootless containers as their owner.
+2. Preserve management and dependencies, including dynamic NFS/RPC ports and VPN clients. Determine source after NAT and IPv6 scope; ask before changing exposure. Listening ports are not an allowlist; global admin access or subnet trust requires explicit intent.
+3. Before any rule write, capture full prior policy and enablement. Prove independent recovery or arm timed rollback; dry run is not recovery. Restore staged rules as well as runtime/boot state on failure. Cancel rollback only after fresh management and required service checks pass.
+4. Activate only the authorized layer. Guest firewalls need no Proxmox mutation. A VM/NIC flag under a disabled cluster firewall is not enforced protection; ask before expanding scope.
+5. From an allowed external client, verify fresh SSH and real application requests with proxy bypass, deadlines, and exit codes. Loopback proves the app, not ingress. Test a disallowed source against a known listener when available; otherwise mark blocking untested and inspect effective verdicts. Verify persistence separately.
 
 ## Network and proxy diagnosis
 
@@ -137,32 +146,28 @@ Trace `client -> DNS -> route -> server interface -> firewall -> listener -> app
 
 On a proxied workstation, use `curl --noproxy '*'` for a direct LAN test. For reverse proxies, inspect effective configuration and upstream reachability; validate configuration before reload and verify both direct upstream and proxied request afterward. Keep credential-bearing URLs and access logs inside the sandbox.
 
-Before changing network or SSH policy, retain the current session and recovery access. Establish the new allow path before removing the old one. Test a reversible runtime change before persisting it; confirm runtime and persistent state agree afterward.
+For network/SSH changes, retain the current session and recovery path. Establish new access before removing old access. Prefer reversible runtime trials; when activation persists immediately, protect it with the firewall rollback procedure. Verify runtime and boot policy agree.
 
 ## Proxmox
 
-Collect bounded `pveversion -v`, `pvesm status`, `qm list`, `pct list`, failed units, and cluster/quorum state when cluster configuration exists. A standalone node without cluster configuration is not a broken cluster.
+For Proxmox audits, collect bounded version, storage, guest, failure, and applicable quorum state. For named guest work, inspect only that guest and required host prerequisites. Standalone is not broken cluster. Inspect relevant filesystem/thin-pool/ZFS/SMART/replication/backup evidence and guest state/locks/dependencies; whitelist configs.
 
-Inspect applicable filesystem, thin-pool, ZFS, SMART, replication, and backup evidence. For affected guests inspect state, locks, task results, and dependencies. Whitelist configuration; cloud-init and storage values can contain credentials.
-
-Before maintenance, check quorum, storage, backups, active migrations/replication, and workloads. Simulate packages; verify affected guests afterward. Ask before node reboot and verify return, storage, quorum, and kernel. Before destructive storage/guest work, map volume → physical devices → guest attachments/mounts/users and require approval plus recovery evidence. For failing sources, avoid automatic mounts, journal replay, repair, or heavy reads; preserve originals until recovery acceptance.
+Before host maintenance, check quorum, storage, backups, migrations, and workloads. Simulate packages. Reboots and required guest stop/start need approval and return-path verification. Before destructive storage work, map volume → devices → attachments and require recovery evidence; avoid mounts, replay, or heavy reads on failing sources.
 
 ## Maintain and verify
 
-1. State the change, invariant, rollback, baseline, and configuration owner.
-2. Inspect the complete play/import graph and `--list-hosts` before selecting existing Ansible automation. A host limit does not constrain action scope; choose security-only tasks for security-only requests.
-3. Before simulation inspect effective inventory, target owner/UID/user-manager access, and controller-to-target host-key policy. Review skipped discovery, shell/command tasks, and forced `check_mode: false` tasks; only verified read-only discovery may run during an audit. Then syntax-check and use targeted `--check --diff` only where safe and meaningful, with sensitive diffs suppressed.
-4. Preserve unversioned state or atomic rollback. Apply only the named scope; require `failed=0`, `unreachable=0`. For database/container upgrades, validate a consistent staged backup and retain compatible image/config/data rollback. Do not copy a live SQLite main file alone or prune rollback images prematurely.
-5. Exercise the changed path and unrelated critical services. Process state, a play recap, or a checksum alone does not prove application behavior or recoverability.
-
-Use graceful service operations and specific PIDs. Do not run blanket process-name termination against the session host. Recheck mutated state once; repeat further only if the result is uncertain or failed.
+1. State change, invariant, rollback, baseline, and configuration owner.
+2. Before Ansible, inspect play/import graph, `--list-hosts`, inventory, owner/user manager, host-key policy, skipped discovery, shell tasks, and forced `check_mode: false`. Host limits restrict hosts, not actions. During audits run only verified read-only tasks. Syntax-check; use targeted safe `--check --diff`, suppressing secrets.
+3. Preserve controller working-tree changes. Edit remote files with anchored operations or verified atomic replacement plus rollback copies.
+4. Preserve unversioned state or atomic rollback. Apply only named scope; require `failed=0`, `unreachable=0`; size timeouts to work. For database/container upgrades, validate backups and retain compatible data/images. Never copy only a live SQLite main file.
+5. Exercise changed paths and critical services; process state, recaps, and checksums are not behavioral proof. Recheck mutated state once unless uncertain or failed. Use graceful service operations and specific PIDs.
 
 ## Report and stop
 
-Lead with conclusion, target/OS, scope, and read-only/change status. Group findings by CRITICAL, WARN, INFO; give evidence, consequence, and the smallest fix. Include healthy checks, behavioral verification, rollback state, and missing coverage. State evidence once.
+Lead with conclusion, target/OS, scope, and read-only/change status. Group audit findings by CRITICAL, WARN, INFO; for a named repair give the change and acceptance evidence. Include rollback state and missing coverage. Distinguish running from healthchecked containers, process activity from enforced policy, and observed from inferred results. State evidence once; never claim completion from a tool invocation, placeholder, or malformed response.
 
 Stop when the requested checks or repair acceptance conditions are satisfied. Keep investigation separate from remediation. Do not create audit files, log entries, memory records, or follow-up work unless requested or required by the environment.
 
 ## Evaluate efficiency
 
-Compare matched requests and coverage using recorded main-agent plus worker input, cache reads, output, turns, calls, elapsed time, retries, failures, and cost basis. State model, cache, host-state, and scope differences. File-size estimates are not billing or runtime savings; causal claims need a matched control.
+Compare matched requests using recorded main-agent plus worker input, cache reads, output, turns, calls, elapsed time, retries, failures, and cost. State model, cache, host-state, and scope differences. Causal claims need a matched control.

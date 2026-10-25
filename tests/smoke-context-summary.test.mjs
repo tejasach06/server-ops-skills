@@ -9,9 +9,14 @@ function child(code, options = {}) {
   });
 }
 
-test("log triage counts the whole capture without exposing raw messages", async () => {
+async function createFixture() {
   const records = [];
   const example = await loadExample(line => records.push(JSON.parse(line)));
+  return { example, records };
+}
+
+test("log triage counts the whole capture without exposing raw messages", async () => {
+  const { example, records } = await createFixture();
   const result = child(`
     for (let i = 0; i < 12000; i++) console.log("request maxTimeout=60000");
     console.log("failed Authorization: Bearer fixture-secret");
@@ -29,8 +34,7 @@ test("log triage counts the whole capture without exposing raw messages", async 
 });
 
 test("a failed process cannot turn empty output into a healthy check", async () => {
-  const records = [];
-  const example = await loadExample(line => records.push(JSON.parse(line)));
+  const { example, records } = await createFixture();
   let analyzed = false;
   example.emit("failed-command", child("process.exit(7)"), () => { analyzed = true; });
   assert.equal(analyzed, false);
@@ -41,16 +45,14 @@ test("a failed process cannot turn empty output into a healthy check", async () 
 });
 
 test("a documented success status can differ from zero", async () => {
-  const records = [];
-  const example = await loadExample(line => records.push(JSON.parse(line)));
+  const { example, records } = await createFixture();
   example.emit("dnf-status", child("process.exit(100)"), () => ({ updatesAvailable: true }), [0, 100]);
   assert.equal(records[0].ok, true);
   assert.deepEqual(records[0].evidence, { updatesAvailable: true });
 });
 
 test("timeouts retain the failure and suppress partial evidence", async () => {
-  const records = [];
-  const example = await loadExample(line => records.push(JSON.parse(line)));
+  const { example, records } = await createFixture();
   const result = child("setInterval(() => {}, 1000)", { timeout: 500 });
   example.emit("timed-out", result, example.logEvidence);
   assert.equal(records[0].error, "ETIMEDOUT");
@@ -60,8 +62,7 @@ test("timeouts retain the failure and suppress partial evidence", async () => {
 });
 
 test("buffer overflow is incomplete evidence, not a successful scan", async () => {
-  const records = [];
-  const example = await loadExample(line => records.push(JSON.parse(line)));
+  const { example, records } = await createFixture();
   const result = child("console.log('error '.repeat(10000))", { maxBuffer: 1024 });
   example.emit("overflow", result, example.logEvidence);
   assert.equal(records[0].error, "ENOBUFS");
@@ -71,8 +72,7 @@ test("buffer overflow is incomplete evidence, not a successful scan", async () =
 });
 
 test("stderr warnings remain visible without exposing diagnostic secrets", async () => {
-  const records = [];
-  const example = await loadExample(line => records.push(JSON.parse(line)));
+  const { example, records } = await createFixture();
   const result = child(`console.error("partial visibility password=fixture-secret");`);
   example.emit("journal-access", result, example.logEvidence);
   assert.equal(records[0].exit, 0);
@@ -82,8 +82,7 @@ test("stderr warnings remain visible without exposing diagnostic secrets", async
 });
 
 test("a malformed probe records an analysis failure and the next probe still runs", async () => {
-  const records = [];
-  const example = await loadExample(line => records.push(JSON.parse(line)));
+  const { example, records } = await createFixture();
   example.emit("unexpected-response", child(`console.log("<html>fixture-secret</html>")`), JSON.parse);
   example.emit("next-probe", child(`console.log('{"ready":true}')`), JSON.parse);
   assert.equal(records[0].error, "ANALYZE_ERROR");
@@ -95,8 +94,7 @@ test("a malformed probe records an analysis failure and the next probe still run
 });
 
 test("SMART diagnostic bit combinations retain evidence but command errors do not", async () => {
-  const records = [];
-  const example = await loadExample(line => records.push(JSON.parse(line)));
+  const { example, records } = await createFixture();
   const smartReadable = code => code >= 0 && code <= 255 && (code & 7) === 0;
   for (const status of [32, 96, 35]) {
     const result = child(`
