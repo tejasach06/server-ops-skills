@@ -38,12 +38,12 @@ Before discovery, resolve target, outcome, owning layer, authorized scope/policy
 | Network failure | DNS, routes, firewall, listener, application, dependencies. |
 | Maintenance | Baseline, recovery plan, targeted dry run, apply, behavioral verification. |
 
-Keep single-host work inline. Delegate only two independent substantial slices or large read sets. Give workers disjoint ownership and verified facts without repeated discovery. Keep shared mutations with one owner.
+Keep 1–2 target host work inline. Subagent delegation is prohibited for single-host audits; delegate only two independent slices across 3+ disjoint hosts or large read sets. Give workers disjoint ownership and verified facts without repeated discovery. Keep shared mutations with one owner.
 
 ## Execute efficiently
 
 1. Discover only the OS, tools, privilege, services, and interfaces required by the resolved goal, once. Reuse facts and earlier probe results; keep a short list of unanswered decision fields.
-2. Batch related read-only probes with a status for each; run independent probes concurrently when useful. An unframed `a; b` sequence reports only the last status. Use separate captures or explicit per-probe status markers.
+2. Batch related read-only probes with a status for each; run independent probes concurrently when useful. An unframed `a; b` sequence reports only the last status. Use separate captures or explicit per-probe status markers. Pass `timeout: 0` for commands exceeding 60s; if backgrounded as `bg_N`, call `wait` or finish turn. NEVER poll (`ps`, `top`, `tail`) a background job.
 3. Parse complete captures inside Context-Mode. Emit decision fields, not raw dumps or response metadata wrappers.
 4. Follow up only on findings, incomplete evidence, or unmet acceptance conditions. Once a decision field is answered, stop searching for it; do not browse histories, unrelated projects, sibling guests, or hardening scripts to infer user intent.
 5. Reuse the helper below; read tool schemas only when the calling convention is unknown.
@@ -102,7 +102,7 @@ Do not hand-interpolate multi-line shell/regex code into JSON args for `ctx_exec
 On Windows, invoke binaries directly with local `cwd` in `spawnSync`; Context-Mode's `cwd` applies to shell mode. Launch success does not prove remote success.
 ## Discover once
 
-For broad audits, batch hostname, `/etc/os-release`, `id`, `sudo -n true`, interface addresses, routes, uptime, init system, and package/firewall/container tools. For a named repair, collect only the required subset. Preserve sudo probe exit status. Detect Proxmox via `pveversion`; virtualization alone does not make a node Proxmox. For multi-node tasks, inspect configured controller inventory first to establish topology before target probes.
+For broad audits, batch hostname, `/etc/os-release`, `id`, `sudo -n true`, interface addresses, routes, uptime, init system (`systemctl is-system-running 2>/dev/null || rc-status 2>/dev/null`), and package/firewall/container tools. For a named repair, collect only the required subset. Preserve sudo probe exit status. Detect Proxmox via `pveversion`; virtualization alone does not make a node Proxmox. For multi-node tasks, inspect configured controller inventory first to establish topology before target probes.
 
 Use `BatchMode=yes` and configured SSH trust. Do not disable host-key checks. If unprivileged, complete available checks and name unverified items precisely. Do not install audit tools or refresh package metadata during audits.
 
