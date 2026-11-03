@@ -19,6 +19,8 @@ The size limits are 220 lines, 16,000 UTF-8 bytes, and a 4,000-token estimate ba
 
 `npm run smoke` executes the embedded example against a local log fixture. No remote server is contacted by default.
 
+CI runs on push and pull request: trusted push checks run on self-hosted Linux (`vm101-server-ops-skills` Podman runner) alongside native Windows, while pull request validation executes on GitHub-hosted runners.
+
 ## Exercise SSH without changing a server
 
 After verifying the SSH alias and target scope, run:
