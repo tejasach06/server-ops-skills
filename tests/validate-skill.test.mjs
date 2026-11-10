@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const skill = (await readFile(new URL("../SKILL.md", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+const source = await readFile(new URL("../SKILL.md", import.meta.url), "utf8");
+const skill = source.replace(/\r\n/g, "\n");
 const lines = skill.trimEnd().split("\n").length;
-const bytes = Buffer.byteLength(skill);
+const bytes = Buffer.byteLength(source);
 const estimatedTokens = Math.ceil(skill.length / 4);
 
 test("frontmatter exposes a valid model-invoked skill", () => {
@@ -13,7 +14,8 @@ test("frontmatter exposes a valid model-invoked skill", () => {
   const fields = Object.fromEntries(header[1].split("\n").map(line => {
     const split = line.indexOf(":");
     assert.ok(split > 0, `Invalid frontmatter entry: ${line}`);
-    return [line.slice(0, split), line.slice(split + 1).trim()];
+    const value = line.slice(split + 1).trim();
+    return [line.slice(0, split), line.startsWith("description:") ? JSON.parse(value) : value];
   }));
   assert.equal(fields.name, "server-ops");
   assert.ok(fields.description?.length > 0, "Missing trigger description");
@@ -28,7 +30,7 @@ test("loaded skill stays within explicit size limits", () => {
   console.log(`skill_size lines=${lines} bytes=${bytes} estimated_tokens=${estimatedTokens} basis=characters/4`);
 });
 
-test("skill has no companion skill or Markdown document dependencies", () => {
+test("skill has no Markdown document or skill-URI dependencies", () => {
   assert.doesNotMatch(skill, /skill:\/\//i);
   assert.doesNotMatch(skill, /\[[^\]]*\]\([^\n)]*\.md(?:#[^\n)]*)?\)/i);
   assert.doesNotMatch(skill, /^\[[^\]]+\]:\s*\S+\.md(?:\s|#|$)/im);
@@ -38,10 +40,13 @@ test("skill has no companion skill or Markdown document dependencies", () => {
 test("description excludes single-host commands and routing keeps safeguards", () => {
   const description = skill.match(/^description: (.*)$/m)[1];
   assert.match(description, /2\+ hosts/);
-  assert.match(description, /Not for one-off single-host commands/);
+  assert.match(description, /Never load for simple single-host/);
+  assert.match(description, /including on Proxmox/);
   const route = skill.match(/## Route by scope\n([\s\S]*?)\n## /)?.[1];
   assert.ok(route, "Missing routing section");
   for (const phrase of ["direct `ssh`", "secrets", "confirm destructive", "back up configs", "verify once", "BatchMode", "host-key", "per-host loop", "ansible-brain", "never fall back to a loop"]) {
     assert.ok(route.includes(phrase), `Routing section missing: ${phrase}`);
   }
+  assert.match(route, /lockout-prone SSH\/firewall\/network changes/);
+  assert.ok(route.indexOf("lockout-prone") < route.indexOf("skip the rest"), "High-risk work must bypass the fast path");
 });

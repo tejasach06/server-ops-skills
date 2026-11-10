@@ -1,6 +1,6 @@
 # server-ops-skills
 
-Build and validate the staged `server-ops` skill for Linux and Proxmox operations.
+Build and validate `server-ops` for Linux/Proxmox operations and `ansible-brain` for routed multi-host writes.
 
 The objective is efficient, reliable server work. A short prompt is useful only if it preserves safety, coverage, and proof of the result. The skill batches related probes, reuses discovery, limits output at its source, and avoids unnecessary workers and repeated checks.
 
@@ -33,16 +33,16 @@ The optional remote smoke runs only `hostname`, `uname -s`, and `uname -r` throu
 
 ## Review before installation
 
-The repository does not install skills, change OMP configuration, uninstall marketplace packages, or publish to GitHub. `SKILL.md` is the complete agent procedure.
+The repository does not install skills, change OMP configuration, uninstall marketplace packages, or publish to GitHub. Each skill's `SKILL.md` is its complete procedure.
 
-1. Review `SKILL.md`, including repair authority, backup verification boundaries, and network/SSH trust safeguards.
+1. Review both skill files, including repair authority, backup boundaries, SSH trust, dependency inspection and cleanup limits.
 2. Check real homelab cases before cutover:
    - Standalone vs clustered Proxmox: missing `/etc/pve/corosync.conf` is standalone, not a broken cluster.
    - Alpine/OpenRC: use portable `df -P`, `rc-status --all`, and named service status. Verify native status semantics; an empty `rc-status --crashed` returned exit 1 on the tested guest.
    - SMART: preserve native health/history bit combinations without treating command/access failures as readable diagnostics. `ok` means analysis succeeded, not that the disk is healthy.
    - Stale host libraries: check long-lived hypervisor QEMU mappings after host package updates; verify mapped libraries before and after approved guest restarts.
    - Automation scope: inspect full play/import graphs before Ansible runs; `--limit` restricts target hosts, not action scope.
-3. When installation is approved, copy or link this directory as `server-ops` in the active OMP skill discovery location.
+3. When installation is approved, install two sibling directories in the active OMP skill discovery root: this directory as `server-ops`, and `skills/ansible-brain/` separately as `ansible-brain`. Do not rely on discovery recursing into `server-ops/skills/`.
 4. Check competing marketplace/router triggers before cutover. Do not leave two procedures eligible and mistake duplicate loading for a result of this skill.
 5. Retain the prior installed package until cutover and rollback are clear.
 
@@ -54,9 +54,9 @@ Compare main-agent plus subagent input, output, cache reads, tool calls, turns, 
 
 Reject an apparent improvement if the new run skipped required checks, hid errors, weakened safety, or did not verify the outcome. Attribute savings to the skill only with a matched comparison. Historical runs with different hosts, remediation scope, context length, or model routing cannot establish causation.
 
-## Maintain the skill
+## Maintain the skills
 
-Edit `SKILL.md` as the single source of operating instructions. Its embedded example is also the source used by the smoke and behavior tests. Keep new instructions tied to a demonstrated operational risk or repeated waste. Run both package commands before review.
+Edit each skill's `SKILL.md` as its source of operating instructions and tested examples. The root smoke tests exercise `server-ops`; the Ansible suite exercises its local cleanup helper and JSON records. Keep instructions tied to demonstrated risk or repeated waste. Run both package commands before review.
 
 The design uses the existing server router, health/security checklists, and host-maintenance procedures as conceptual templates. Runtime use has no dependency on those marketplace skills. Existing environment-level instructions still apply, so staging this skill alone cannot prevent the host from independently loading another mandated skill.
 
@@ -70,4 +70,10 @@ QEMU stop/start, package upgrades, storage removal, backup restore, and matched 
 
 ## Helper skill: ansible-brain
 
-`skills/ansible-brain/SKILL.md` handles multi-host writes that `server-ops` routes to it. It keeps an AI-only store of playbooks, roles and alias-only inventories in a local brain directory. The brain path is chosen by the user at first run. Runs go through a temporary venv on a master host, which is removed afterward. Its tests are in `tests/ansible-brain.test.mjs`; `npm test` runs them too.
+`skills/ansible-brain/SKILL.md` handles multi-host writes routed by `server-ops`. First run asks for a local brain path and a permanent-controller decision; the path needs a user-approved persistent discovery reference, not just a reply. Inspect stored playbooks and their full dependencies before execution. Import/stage only secret-safe copies and explicit reviewed git paths; log failed attempts without promoting them.
+
+Runs require a working temporary venv, Python-compatible pinned dependencies/collections, isolated Ansible paths, and trusted strict SSH checking for every target/jump. Agent forwarding requires a trusted controller and usable agent-only keys. Missing venv support blocks execution without installing system packages.
+
+Remote teardown must explicitly stop owned work, clean target temp paths and close sockets before deleting run directories. The embedded awaited Node helper removes only local files after job settlement; it does not clean remote hosts or handle signals. Disconnects, SIGKILL and power loss can leave state requiring recovery. Git is not a remote-data backup or automatic rollback.
+
+`tests/ansible-brain.test.mjs` executes the shipped helper for sync/async success/failure and pending work, parses concrete JSON/JSONL records, and checks policy separately. `npm test` runs it; these local tests do not prove remote cleanup, forwarding or ProxyJump behavior.

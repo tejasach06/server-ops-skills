@@ -94,10 +94,23 @@ test("a malformed probe records an analysis failure and the next probe still run
   assert.equal(JSON.stringify(records).includes("fixture-secret"), false);
 });
 
+test("an analyzer without a return value retains an explicit null evidence field", async () => {
+  const { example, records } = await createFixture();
+  example.emit("no-evidence", child("process.exit(0)"), () => {});
+  assert.equal(records[0].ok, true);
+  assert.equal(Object.hasOwn(records[0], "evidence"), true);
+  assert.equal(records[0].evidence, null);
+});
+
 test("SMART diagnostic bit combinations retain evidence but command errors do not", async () => {
   const { example, records } = await createFixture();
   const rule = (await readFile(new URL("../SKILL.md", import.meta.url), "utf8")).match(/pass `(code => [^`]+)`/)[1];
   const smartReadable = new Function(`return ${rule}`)();
+  for (let status = 0; status <= 255; status++) {
+    assert.equal(smartReadable(status), status % 8 === 0, `SMART exit ${status}`);
+  }
+  assert.equal(smartReadable(-1), false);
+  assert.equal(smartReadable(256), false);
   for (const status of [32, 96, 35]) {
     const result = child(`
       console.log(JSON.stringify({ pending: 24, uncorrectable: 24 }));

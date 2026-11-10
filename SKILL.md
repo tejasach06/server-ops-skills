@@ -1,11 +1,11 @@
 ---
 name: server-ops
-description: Audit or maintain Linux/Proxmox servers: health, security, firewall/SSH/network changes, backups, maintenance, or any task on 2+ hosts. Not for one-off single-host commands.
+description: "Linux/Proxmox: 2+ hosts, audits, firewall/network/SSH policy, storage, backups, upgrades. Never load for simple single-host users, logs, services, packages, files, cron or facts, including on Proxmox."
 ---
 
 # Server operations
 
-Optimize for verified results with few round trips, not fewer safeguards. Keep audits read-only, batch relevant probes, and follow evidence.
+Optimize for verified results with few round trips, not fewer safeguards. Keep audits read-only, batch probes, and follow evidence.
 
 ## Scope and safety
 
@@ -18,9 +18,9 @@ Optimize for verified results with few round trips, not fewer safeguards. Keep a
 
 ## Route by scope
 
+- Audits, lockout-prone SSH/firewall/network changes, storage, backups and upgrades: continue, even on one host.
 - One host, simple task (user, log, service, package, one file, cron, facts): run direct `ssh`; skip the rest of this skill. Keep secrets out of output, confirm destructive steps, back up configs, verify once after, BatchMode with host-key checks on.
 - 2+ hosts: reads use a per-host loop with per-host status. Writes use the `ansible-brain` skill; with no inventory or play, stop and ask, never fall back to a loop.
-- Other work: continue.
 
 ## Clarify the goal first
 
@@ -30,7 +30,7 @@ Before discovery, resolve target, outcome, owning layer, authorized scope/policy
 - Derive addresses, identity, ownership, and tooling from memory/inventory and narrow read-only checks; ask only for intent. Never infer an address from a VM ID.
 - Separate guest OS, VM/NIC, hypervisor, and cluster scope. If firewall layer remains unspecified, ask UFW/firewalld versus Proxmox before probing either. A scope correction does not select a layer. A named VM permits no unrelated guest inspection or host/cluster mutation.
 - For access policy, obtain the allowed client/network → service matrix. Listening does not authorize global or whole-subnet exposure.
-- Briefly restate the goal and exclusions, then act unless new evidence introduces a material choice.
+- Restate goal and exclusions; act unless evidence introduces a material choice.
 - Once intent is explicit, proceed; do not re-ask. Recheck policy before writes.
 
 ## Select work
@@ -48,7 +48,7 @@ Keep 1–2 host work inline; never delegate single-host audits. Delegate only tw
 
 ## Execute efficiently
 
-1. Discover only the OS, tools, privilege, services, and interfaces required by the resolved goal, once. Reuse facts and earlier probe results; keep a short list of unanswered decision fields.
+1. Discover only required OS, tools, privilege, services and interfaces once. Reuse facts and probe results; track unanswered decision fields.
 2. Batch related read-only probes with a status for each; run independent probes concurrently when useful. An unframed `a; b` sequence reports only the last status. Use separate captures or explicit per-probe status markers. Pass `timeout: 0` for commands exceeding 60s; if backgrounded as `bg_N`, call `wait` or finish turn. NEVER poll (`ps`, `top`, `tail`) a background job.
 3. Parse complete captures inside Context-Mode. Emit decision fields, not raw dumps or response metadata wrappers.
 4. Follow up only on findings, incomplete evidence, or unmet acceptance conditions. Once a decision field is answered, stop searching for it; do not browse histories, unrelated projects, sibling guests, or hardening scripts to infer user intent.

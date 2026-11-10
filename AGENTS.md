@@ -2,17 +2,18 @@
 
 ## Project Overview
 
-This repo builds and validates the `server-ops` OMP skill. The skill is a procedure for agents that audit, diagnose, or maintain Linux and Proxmox servers. The product is one file: `SKILL.md`. Everything else exists to validate that file. The repo does not install the skill, change OMP config, or publish anything (see `README.md`, "Review before installation").
+This repo builds and validates two OMP skills: `server-ops` (`SKILL.md`) for Linux/Proxmox operations, and `ansible-brain` (`skills/ansible-brain/SKILL.md`) for routed multi-host writes. Both Markdown files are shipped procedures with embedded examples tested from source. The repo does not install skills, change OMP config, or publish anything (see `README.md`, "Review before installation").
 
 ## Architecture & Data Flow
 
-- `SKILL.md` is the single source of truth. It holds the agent instructions and **exactly one** fenced ```` ```javascript ```` block. That block defines the helpers `ssh`, `emit`, and `logEvidence`, and agents run it inside `ctx_execute`.
+- `SKILL.md` is the source of truth for `server-ops`. It holds exactly one fenced ```` ```javascript ```` block defining `ssh`, `emit`, and `logEvidence`, run inside `ctx_execute`.
 - `scripts/skill-example.mjs` → `loadExample(log)`:
   1. Reads `SKILL.md`.
   2. Regex-extracts the single `javascript` fence. It throws if the count is not 1.
   3. Evaluates the fence with `node:vm` `runInNewContext`. Only `require` and `console.log` (routed to `log`) are injected. Timeout is 1000 ms.
   4. Returns `{ ssh, emit, logEvidence }`.
-- The tests and the smoke script call `loadExample`, so they always exercise the shipped code, never a copy.
+- The server-ops behavior tests and smoke script call `loadExample`, so they exercise shipped code, never a copy.
+- `skills/ansible-brain/SKILL.md` is the source of truth for Ansible storage/run guidance. `tests/ansible-brain.test.mjs` evaluates its actual local cleanup helper and parses its JSON/JSONL examples. That helper does not perform remote cleanup or handle signals; policy checks are secondary to behavior tests.
 - Helper contract (do not break; tests assert it):
   - `ssh(host, cmd, timeout=30_000)` calls `spawnSync("ssh", ["-o","BatchMode=yes","-o","ConnectTimeout=10","--",host,cmd])`. `maxBuffer` is 8 MiB.
   - `emit(check, result, analyze, accepted=[0])` prints one JSON line: `{check, exit, signal, error, complete, ok, stderrChars, evidence}`.
@@ -24,7 +25,8 @@ This repo builds and validates the `server-ops` OMP skill. The skill is a proced
 
 ## Key Directories
 
-- `/` holds `SKILL.md` (the product), `README.md` (maintainer docs and validation evidence), and `package.json`.
+- `/` holds `SKILL.md` (`server-ops`), `README.md` (maintainer docs and validation evidence), and `package.json`.
+- `skills/ansible-brain/` holds the self-contained Ansible helper skill.
 - `scripts/` holds `skill-example.mjs`, the loader for the embedded example.
 - `tests/` holds the `*.test.mjs` suites (`node:test`) and `smoke-context-summary.mjs`, a standalone smoke script that is not run by `npm test`.
 - `.github/workflows/check.yml` is the CI config.
@@ -54,7 +56,7 @@ There is no build step, no lint or format tooling, and no npm install, because t
 ## Important Files
 
 - `SKILL.md`: frontmatter `name: server-ops` plus a `description` trigger. The embedded JS helper is at about lines 53–96.
-- `scripts/skill-example.mjs`: the loader that every test depends on.
+- `scripts/skill-example.mjs`: the loader used by server-ops behavior tests and smoke.
 - `tests/validate-skill.test.mjs`: structural invariants (listed below).
 - `tests/smoke-context-summary.test.mjs`: behavior tests covering log triage, failed status, custom accepted status, timeout, overflow, stderr secrecy, analyzer-failure isolation, and SMART bit combinations.
 - `tests/smoke-context-summary.mjs`: the smoke CLI (`--host SSH_ALIAS` is the only accepted argument).
@@ -75,8 +77,8 @@ There is no build step, no lint or format tooling, and no npm install, because t
   - `disable-model-invocation` is not `true`.
   - The file is at most **220 lines**, **16,000 UTF-8 bytes**, and **4,000 estimated tokens** (chars/4).
   - There are no `skill://` references and no links to `.md` files or `references/`/`docs/` paths. The skill must stay self-contained.
-- The file must contain exactly one ```` ```javascript ```` fence. If you add a second JS example, label it with another language tag; otherwise `loadExample` throws.
-- When you change the helper, update the assertions in `tests/smoke-context-summary.test.mjs` and `tests/smoke-context-summary.mjs`, for example the JSON record shape and the pattern counts.
+- Each skill contains exactly one ```` ```javascript ```` fence. The root loader reads only `SKILL.md`; the Ansible tests read only `skills/ansible-brain/SKILL.md`. Do not label extra snippets `javascript` to evade the loader's count.
+- When changing the server-ops helper, update `tests/smoke-context-summary.test.mjs` and `tests/smoke-context-summary.mjs`. For Ansible cleanup/schema changes, update `tests/ansible-brain.test.mjs`; exercise synchronous/asynchronous success/failure and parse records, not just policy phrases.
 - Run both `npm test` and `npm run smoke` before review.
 
 ## Agent skills
@@ -101,7 +103,7 @@ Single-context: `GLOSSARY.md` and `docs/adr/` at repo root. See `docs/agents/dom
 
 ## Recommended skills
 
-The product is a Markdown agent skill (`SKILL.md`) validated by Node `node:test` suites. Pick skills by task:
+The products are two Markdown agent skills validated by Node `node:test` suites. Pick skills by task:
 
 | Task | Skill |
 | --- | --- |
