@@ -55,3 +55,14 @@ test("cleanup returns the job result on success", () => {
   assert.equal(withCleanup(dir, () => "ok"), "ok");
   assert.equal(existsSync(dir), false);
 });
+
+test("run flow isolates the venv from the master's Ansible config", () => {
+  assert.match(skill, /`ANSIBLE_CONFIG` and `ANSIBLE_HOME`/);
+});
+
+test("run flow ships a temp ssh config and keeps known_hosts and sockets in the temp dir", () => {
+  assert.match(skill, /ssh -G <alias>/);
+  assert.match(skill, /UserKnownHostsFile=/);
+  assert.match(skill, /ControlPath=/);
+  assert.match(skill, /host-key checks stay on/);
+});

@@ -36,8 +36,8 @@ Save only after `ansible-playbook --syntax-check`, `--check --diff` and a real r
 Use this when server-ops routes a 2+ host write here.
 
 1. Pick the master: the server that reaches every target. Probe candidates with `ssh -o BatchMode=yes`. Ask the user if the choice is ambiguous. If the user names a permanent controller, record it in `SCHEMA.md` and use it next time.
-2. Create a temp directory on the master. Create a venv inside it. Check `python3 -m venv` first; if it fails, report it and stop. Do not install system packages. Run `pip install ansible-core`.
-3. Copy the playbook and an alias-only inventory into the temp directory. Use `ssh -A` (agent forwarding). Never copy a private key to the master.
+2. Create a temp directory on the master. Create a venv inside it. Check `python3 -m venv` first; if it fails, report it and stop. Do not install system packages. Run `pip install ansible-core`. Write a minimal `ansible.cfg` in the temp directory and export `ANSIBLE_CONFIG` and `ANSIBLE_HOME` to it; the master's own config can name plugins the venv lacks and fail the run.
+3. Aliases from the user's SSH config may not exist on the master. Generate a temp `sshcfg` from local `ssh -G <alias>` (HostName, User, Port, ProxyJump only), and set `ssh_args` in the temp `ansible.cfg` to `-F` that file, `-o UserKnownHostsFile=` a temp copy of the master's `known_hosts` (host-key checks stay on), and `ControlPath=` in the temp dir. Copy the playbook and the alias-only inventory there. Use `ssh -A` (agent forwarding). Never copy a private key to the master.
 4. Run `--syntax-check`, then `--check --diff`, then the real run. Use `timeout: 0` for long runs and do not poll.
 5. Cleanup runs in a `finally`, even on failure or interrupt. Use the helper below.
 6. Log the run here, then save if the save rule passes.
@@ -54,7 +54,7 @@ function withCleanup(tempDir, job) {
 }
 ```
 
-Cleanup removes the temp directory. It does not remove `known_hosts` entries, SSH control sockets, or the `auth.log`, `lastlog` and journal records written by logins. Remove `known_hosts` entries and control sockets the run created. Never delete audit logs.
+Cleanup removes the temp directory. It does not remove the `auth.log`, `lastlog` and journal records written by logins. Nothing else to remove: `known_hosts` and sockets live in the temp directory. Never delete audit logs.
 
 ## Limits
 
