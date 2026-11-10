@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { loadExample } from "../scripts/skill-example.mjs";
 
@@ -95,7 +96,8 @@ test("a malformed probe records an analysis failure and the next probe still run
 
 test("SMART diagnostic bit combinations retain evidence but command errors do not", async () => {
   const { example, records } = await createFixture();
-  const smartReadable = code => code >= 0 && code <= 255 && (code & 7) === 0;
+  const rule = (await readFile(new URL("../SKILL.md", import.meta.url), "utf8")).match(/pass `(code => [^`]+)`/)[1];
+  const smartReadable = new Function(`return ${rule}`)();
   for (const status of [32, 96, 35]) {
     const result = child(`
       console.log(JSON.stringify({ pending: 24, uncorrectable: 24 }));

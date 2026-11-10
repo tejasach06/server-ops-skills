@@ -6,7 +6,7 @@ The objective is efficient, reliable server work. A short prompt is useful only 
 
 ## Check the package
 
-Use Node.js 20 or newer. There are no npm dependencies to install.
+Use Node.js 22 or newer. There are no npm dependencies to install.
 
 ```powershell
 npm test

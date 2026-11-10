@@ -65,7 +65,7 @@ function emit(check, result, analyze, accepted = [0]) {
   try {
     ok = complete && (typeof accepted === "function"
       ? accepted(result.status) : accepted.includes(result.status));
-    if (ok) evidence = analyze(result.stdout || "");
+    if (ok) evidence = analyze(result.stdout || "") ?? null;
   } catch {
     ok = false;
     error = "ANALYZE_ERROR";
@@ -159,7 +159,7 @@ Before host maintenance, check quorum, storage, backups, migrations, and workloa
 1. State change, invariant, rollback, baseline, and configuration owner.
 2. Before Ansible, inspect play/import graph, `--list-hosts`, inventory, owner/user manager, host-key policy, skipped discovery, shell tasks, and forced `check_mode: false`. Host limits restrict hosts, not actions. During audits run only verified read-only tasks. Syntax-check; use targeted safe `--check --diff`, suppressing secrets.
 3. Preserve controller working-tree changes. Edit remote files with anchored operations or verified atomic replacement plus rollback copies.
-4. Preserve unversioned state or atomic rollback. Apply only named scope; require `failed=0`, `unreachable=0`; size timeouts to work. For database/container upgrades, validate backups and retain compatible data/images. Never copy only a live SQLite main file.
+4. Preserve unversioned state or atomic rollback. Apply only named scope; require `failed=0`, `unreachable=0`; size timeouts to work; a local timeout kills only the ssh client, so check remote processes and locks before retrying. For database/container upgrades, validate backups and retain compatible data/images. Never copy only a live SQLite main file.
 5. Exercise changed paths and critical services; process state, recaps, and checksums are not behavioral proof. Recheck mutated state once unless uncertain or failed. Use graceful service operations and specific PIDs.
 
 ## Report and stop
