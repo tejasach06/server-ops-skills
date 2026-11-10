@@ -1,31 +1,37 @@
 ---
 name: server-ops
-description: Audit, diagnose, or maintain Linux and Proxmox servers. Use for host health, security, networking, packages, containers, storage, backups, and guest operations.
+description: Audit or maintain Linux/Proxmox servers: health, security, firewall/SSH/network changes, backups, maintenance, or any task on 2+ hosts. Not for one-off single-host commands.
 ---
 
 # Server operations
 
-Optimize for a verified result with few round trips, not fewer safeguards. Keep audits read-only, batch relevant probes, and follow evidence. Complete skill; no companion skill needed.
+Optimize for verified results with few round trips, not fewer safeguards. Keep audits read-only, batch relevant probes, and follow evidence.
 
 ## Scope and safety
 
 - Resolve targets from the configured memory interface, SSH config, or inventory. Verify live identity, OS, access, and privilege before relying on remembered facts.
 - An audit authorizes inspection, not repairs. A request to fix authorizes the named repair. Ask before destructive actions, reboots, or changes with unclear scope.
 - Preserve access, unrelated services, and recovery paths. Do not weaken SSH, TLS verification, SELinux, AppArmor, or a firewall to make a check pass.
-- Use Context-Mode for uncertain or large output. Keep credentials, hashes, environment dumps, private keys, and full application configuration out of returned text.
-- Use existing Ansible automation for repeatable changes. Do not hardcode homelab addresses, credentials, controller paths, or service lists in this skill.
-- Preserve unrelated working-tree changes. Never reset or check out files to manufacture a clean tree.
+- Use Context-Mode for large output. Keep credentials, hashes, env dumps, private keys and full app config out of returned text.
+- Use existing Ansible automation for repeatable changes and all multi-host writes. Do not hardcode addresses, credentials, controller paths or service lists.
+- Preserve unrelated working-tree changes; never reset files to clean the tree.
+
+## Route by scope
+
+- One host, simple task (user, log, service, package, one file, cron, facts): run direct `ssh`; skip the rest of this skill. Keep secrets out of output, confirm destructive steps, back up configs, verify once after, BatchMode with host-key checks on.
+- 2+ hosts: reads use a per-host loop with per-host status. Writes use the `ansible-brain` skill; with no inventory or play, stop and ask, never fall back to a loop.
+- Other work: continue.
 
 ## Clarify the goal first
 
 Before discovery, resolve target, outcome, owning layer, authorized scope/policy, and observable acceptance:
 
-- Ask clarifying questions until no consequential choice depends on guessed intent. Batch unresolved choices with concrete tradeoffs; ask again when an answer or scope correction leaves another choice open.
+- Ask until no consequential choice depends on guessed intent. Batch choices with concrete tradeoffs; re-ask if an answer leaves another open.
 - Derive addresses, identity, ownership, and tooling from memory/inventory and narrow read-only checks; ask only for intent. Never infer an address from a VM ID.
 - Separate guest OS, VM/NIC, hypervisor, and cluster scope. If firewall layer remains unspecified, ask UFW/firewalld versus Proxmox before probing either. A scope correction does not select a layer. A named VM permits no unrelated guest inspection or host/cluster mutation.
 - For access policy, obtain the allowed client/network → service matrix. Listening does not authorize global or whole-subnet exposure.
 - Briefly restate the goal and exclusions, then act unless new evidence introduces a material choice.
-- Once intent is explicit, proceed with targeted discovery; do not re-ask answered questions. Reconcile new findings with the policy before writes.
+- Once intent is explicit, proceed; do not re-ask. Recheck policy before writes.
 
 ## Select work
 
@@ -38,7 +44,7 @@ Before discovery, resolve target, outcome, owning layer, authorized scope/policy
 | Network failure | DNS, routes, firewall, listener, application, dependencies. |
 | Maintenance | Baseline, recovery plan, targeted dry run, apply, behavioral verification. |
 
-Keep 1–2 target host work inline. Subagent delegation is prohibited for single-host audits; delegate only two independent slices across 3+ disjoint hosts or large read sets. Give workers disjoint ownership and verified facts without repeated discovery. Keep shared mutations with one owner.
+Keep 1–2 host work inline; never delegate single-host audits. Delegate only two independent slices across 3+ disjoint hosts or large read sets. Give workers disjoint ownership and verified facts. Keep shared mutations with one owner.
 
 ## Execute efficiently
 
@@ -97,7 +103,7 @@ function logEvidence(text) {
 
 Pass a whitelisting analyzer to `emit`, or `logEvidence` for counts. When `stderrChars` > 0, inspect stderr in sandbox and classify warnings before concluding; diagnostics can contain secrets. Empty/unrecognized output is not healthy. On timeout, overflow, or parse failure, narrow that probe and finish unaffected checks.
 
-Do not hand-interpolate multi-line shell/regex code into JSON args for `ctx_execute`; unescaped quotes or newlines cause parse errors. Use single-line commands, stream complex scripts via stdin/heredocs in the sandbox, or use `eval` with JSON serialization.
+Do not hand-interpolate multi-line shell/regex code into JSON args for `ctx_execute`; quotes or newlines break parsing. Use single-line commands, stdin/heredocs in the sandbox, or `eval` with JSON serialization.
 
 On Windows, invoke binaries directly with local `cwd` in `spawnSync`; Context-Mode's `cwd` applies to shell mode. Launch success does not prove remote success.
 ## Discover once
@@ -168,6 +174,3 @@ Lead with conclusion, target/OS, scope, and read-only/change status. Group audit
 
 Stop when the requested checks or repair acceptance conditions are satisfied. Keep investigation separate from remediation. Do not create audit files, log entries, memory records, or follow-up work unless requested or required by the environment.
 
-## Evaluate efficiency
-
-Compare matched requests using recorded main-agent plus worker input, cache reads, output, turns, calls, elapsed time, retries, failures, and cost. State model, cache, host-state, and scope differences. Causal claims need a matched control.

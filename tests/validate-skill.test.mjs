@@ -34,3 +34,14 @@ test("skill has no companion skill or Markdown document dependencies", () => {
   assert.doesNotMatch(skill, /^\[[^\]]+\]:\s*\S+\.md(?:\s|#|$)/im);
   assert.doesNotMatch(skill, /(?:references|docs)\/[\w./-]+\.md/i);
 });
+
+test("description excludes single-host commands and routing keeps safeguards", () => {
+  const description = skill.match(/^description: (.*)$/m)[1];
+  assert.match(description, /2\+ hosts/);
+  assert.match(description, /Not for one-off single-host commands/);
+  const route = skill.match(/## Route by scope\n([\s\S]*?)\n## /)?.[1];
+  assert.ok(route, "Missing routing section");
+  for (const phrase of ["direct `ssh`", "secrets", "confirm destructive", "back up configs", "verify once", "BatchMode", "host-key", "per-host loop", "ansible-brain", "never fall back to a loop"]) {
+    assert.ok(route.includes(phrase), `Routing section missing: ${phrase}`);
+  }
+});

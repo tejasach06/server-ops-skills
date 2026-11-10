@@ -67,3 +67,7 @@ Three added regressions failed before the helper fix and passed afterward: stder
 Read-only live checks exercised portable disk inspection on Alpine CT112, native SMART exit 32 on Proxmox while retaining pending-sector evidence, and a denied-privilege probe followed by a successful independent probe. Ansible import scope, effective transport trust, and dry-run behavior must be inspected before any tasks execute. The staged skill does not repair the existing controller playbooks.
 
 QEMU stop/start, package upgrades, storage removal, backup restore, and matched efficiency trials remain unexercised. No runtime token or latency savings are claimed.
+
+## Helper skill: ansible-brain
+
+`skills/ansible-brain/SKILL.md` handles multi-host writes that `server-ops` routes to it. It keeps an AI-only store of playbooks, roles and alias-only inventories in a local brain directory. The brain path is chosen by the user at first run. Runs go through a temporary venv on a master host, which is removed afterward. Its tests are in `tests/ansible-brain.test.mjs`; `npm test` runs them too.

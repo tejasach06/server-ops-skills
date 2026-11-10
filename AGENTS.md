@@ -115,3 +115,8 @@ The product is a Markdown agent skill (`SKILL.md`) validated by Node `node:test`
 | Resolve terms and decisions | `domain-modeling`, `grill-with-docs` |
 
 Skip TypeScript, UI and PR-description skills: the repo has none of those artifacts.
+
+## Two skills
+
+- `SKILL.md` is `server-ops`. `skills/ansible-brain/SKILL.md` is the helper for multi-host Ansible writes. Each skill has its own size limits, checked in `tests/`.
+- `server-ops` may name `ansible-brain` in plain text. Do not add `skill://` links or Markdown links between the two.
