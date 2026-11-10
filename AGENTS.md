@@ -61,7 +61,7 @@ There is no build step, no lint or format tooling, and no npm install, because t
 
 ## Runtime/Tooling Preferences
 
-- Node `>=20` (`engines`). CI pins Node 22 on `ubuntu-latest` and `windows-latest`, and runs `npm test` then `npm run smoke`. Node 20 itself is not tested in CI.
+- Node `>=22` (`engines`). CI runs Node 22 on a self-hosted Linux runner (VM101) and runs `npm test` then `npm run smoke`. Windows is not in CI; `node --test tests/*.test.mjs` needs Node 22 for glob expansion under `cmd.exe`.
 - npm is the script runner only. There is no lockfile and none is needed.
 - The skill targets OMP with Context-Mode (`ctx_execute`). On Windows, `spawnSync` must invoke binaries directly with a local `cwd`.
 
