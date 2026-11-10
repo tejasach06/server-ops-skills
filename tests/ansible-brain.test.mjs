@@ -24,6 +24,7 @@ test("frontmatter exposes ansible-brain with a trigger description", () => {
   const header = skill.match(/^---\n([\s\S]*?)\n---\n/);
   assert.ok(header, "Missing YAML frontmatter");
   assert.match(header[1], /^name: ansible-brain$/m);
+  assert.match(header[1], /^disable-model-invocation: true$/m);
   const description = JSON.parse(header[1].match(/^description: (.*)$/m)[1]);
   assert.equal(typeof description, "string");
   assert.ok(description.length <= 220, "Description exceeds discovery budget");

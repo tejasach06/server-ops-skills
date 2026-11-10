@@ -6,7 +6,7 @@ This repo builds and validates two OMP skills: `server-ops` (`SKILL.md`) for Lin
 
 ## Architecture & Data Flow
 
-- `SKILL.md` is the source of truth for `server-ops`. It holds exactly one fenced ```` ```javascript ```` block defining `ssh`, `emit`, and `logEvidence`, run inside `ctx_execute`.
+- `SKILL.md` is the source of truth for `server-ops`. It holds exactly one fenced ```` ```javascript ```` block defining `ssh`, `emit`, and `logEvidence`, run with Node.js in a shell or available sandbox.
 - `scripts/skill-example.mjs` → `loadExample(log)`:
   1. Reads `SKILL.md`.
   2. Regex-extracts the single `javascript` fence. It throws if the count is not 1.
@@ -65,16 +65,16 @@ There is no build step, no lint or format tooling, and no npm install, because t
 
 - Node `>=22` (`engines`). CI runs Node 22 on a self-hosted Linux runner (VM101) and runs `npm test` then `npm run smoke`. Windows is not in CI; `node --test tests/*.test.mjs` needs Node 22 for glob expansion under `cmd.exe`.
 - npm is the script runner only. There is no lockfile and none is needed.
-- The skill targets OMP with Context-Mode (`ctx_execute`). On Windows, `spawnSync` must invoke binaries directly with a local `cwd`.
+- Both procedures target AGY, Codex, OMP, Pi and Claude without requiring a particular sandbox API. On Windows, `spawnSync` must invoke binaries directly with an explicit `cwd`.
 
 ## Testing & QA
 
 - The framework is `node:test` with `node:assert/strict`. No coverage tool is configured. The expectation is that every behavior of the helpers has a test.
 - Hard invariants on `SKILL.md` (`tests/validate-skill.test.mjs`). Exceeding any of these fails CI:
-  - The frontmatter parses as `key: value` lines.
+  - Frontmatter uses `key: value` lines; descriptions are JSON-quoted strings, also valid YAML scalars.
   - `name` equals `server-ops`.
   - `description` is non-empty and at most 220 characters.
-  - `disable-model-invocation` is not `true`.
+  - `disable-model-invocation` is `true`; native adapters supply equivalent explicit-only controls or a manual fallback.
   - The file is at most **220 lines**, **16,000 UTF-8 bytes**, and **4,000 estimated tokens** (chars/4).
   - There are no `skill://` references and no links to `.md` files or `references/`/`docs/` paths. The skill must stay self-contained.
 - Each skill contains exactly one ```` ```javascript ```` fence. The root loader reads only `SKILL.md`; the Ansible tests read only `skills/ansible-brain/SKILL.md`. Do not label extra snippets `javascript` to evade the loader's count.
@@ -122,3 +122,11 @@ Skip TypeScript, UI and PR-description skills: the repo has none of those artifa
 
 - `SKILL.md` is `server-ops`. `skills/ansible-brain/SKILL.md` is the helper for multi-host Ansible writes. Each skill has its own size limits, checked in `tests/`.
 - `server-ops` may name `ansible-brain` in plain text. Do not add `skill://` links or Markdown links between the two.
+
+## Portable activation
+
+- Support AGY, Codex, OMP, Pi, then Claude Code. Keep canonical procedures independent of harness-specific sandbox, timeout, memory, or job APIs.
+- `scripts/export-commands.mjs` exports small explicit-command wrappers into a new directory only. Never install into active profiles or merge existing configuration without separate approval.
+- AGY uses manual prompts, Codex uses explicit `$name` skills with implicit invocation disabled, OMP/Pi use `/name` prompt templates, and Claude uses explicit-only `/name` skills.
+- Never promise exact slash syntax where unsupported, or infer strict activation from a negative description. Disable older auto-discovered copies before cutover; generated wrappers do not control unrelated assistant behavior.
+- Ask for missing target/scope before loading either procedure. Do not load these procedures for ordinary simple single-host work, including on Proxmox.

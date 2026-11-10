@@ -1,6 +1,7 @@
 ---
 name: server-ops
 description: "Linux/Proxmox: 2+ hosts, audits, firewall/network/SSH policy, storage, backups, upgrades. Never load for simple single-host users, logs, services, packages, files, cron or facts, including on Proxmox."
+disable-model-invocation: true
 ---
 
 # Server operations
@@ -9,10 +10,10 @@ Optimize for verified results with few round trips, not fewer safeguards. Keep a
 
 ## Scope and safety
 
-- Resolve targets from the configured memory interface, SSH config, or inventory. Verify live identity, OS, access, and privilege before relying on remembered facts.
+- Resolve targets from approved configuration, SSH config or inventory. Verify live identity, OS, access and privilege before relying on stored facts.
 - An audit authorizes inspection, not repairs. A request to fix authorizes the named repair. Ask before destructive actions, reboots, or changes with unclear scope.
 - Preserve access, unrelated services, and recovery paths. Do not weaken SSH, TLS verification, SELinux, AppArmor, or a firewall to make a check pass.
-- Use Context-Mode for large output. Keep credentials, hashes, env dumps, private keys and full app config out of returned text.
+- Contain large output in a sandbox or owner-only local captures. Keep credentials, hashes, env dumps, private keys and full app config out of returned text.
 - Use existing Ansible automation for repeatable changes and all multi-host writes. Do not hardcode addresses, credentials, controller paths or service lists.
 - Preserve unrelated working-tree changes; never reset files to clean the tree.
 
@@ -27,7 +28,7 @@ Optimize for verified results with few round trips, not fewer safeguards. Keep a
 Before discovery, resolve target, outcome, owning layer, authorized scope/policy, and observable acceptance:
 
 - Ask until no consequential choice depends on guessed intent. Batch choices with concrete tradeoffs; re-ask if an answer leaves another open.
-- Derive addresses, identity, ownership, and tooling from memory/inventory and narrow read-only checks; ask only for intent. Never infer an address from a VM ID.
+- Derive addresses, identity, ownership and tooling from approved config/inventory and narrow read-only checks; ask only for intent. Never infer an address from a VM ID.
 - Separate guest OS, VM/NIC, hypervisor, and cluster scope. If firewall layer remains unspecified, ask UFW/firewalld versus Proxmox before probing either. A scope correction does not select a layer. A named VM permits no unrelated guest inspection or host/cluster mutation.
 - For access policy, obtain the allowed client/network → service matrix. Listening does not authorize global or whole-subnet exposure.
 - Restate goal and exclusions; act unless evidence introduces a material choice.
@@ -48,13 +49,13 @@ Keep 1–2 host work inline; never delegate single-host audits. Delegate only tw
 
 ## Execute efficiently
 
-1. Discover only required OS, tools, privilege, services and interfaces once. Reuse facts and probe results; track unanswered decision fields.
-2. Batch related read-only probes with a status for each; run independent probes concurrently when useful. An unframed `a; b` sequence reports only the last status. Use separate captures or explicit per-probe status markers. Pass `timeout: 0` for commands exceeding 60s; if backgrounded as `bg_N`, call `wait` or finish turn. NEVER poll (`ps`, `top`, `tail`) a background job.
-3. Parse complete captures inside Context-Mode. Emit decision fields, not raw dumps or response metadata wrappers.
+1. Discover required OS, tools, privilege, services and interfaces once. Reuse evidence; track unanswered fields.
+2. Batch read-only probes with per-probe status; use separate captures, not unframed `a; b`. Size deadlines to work using the harness's schema. If backgrounded, retain the job handle and use its supported wait/notification. NEVER poll (`ps`, `top`, `tail`) a background job.
+3. Parse complete captures locally. Emit decision fields, not raw dumps or metadata wrappers. Without a sandbox, use owner-only temporary stdout/stderr files, preserve status, summarize, then delete them.
 4. Follow up only on findings, incomplete evidence, or unmet acceptance conditions. Once a decision field is answered, stop searching for it; do not browse histories, unrelated projects, sibling guests, or hardening scripts to infer user intent.
 5. Reuse the helper below; read tool schemas only when the calling convention is unknown.
 
-Use this JavaScript inside `ctx_execute`. Raw bytes stay in the sandbox. `ok` means execution and analysis succeeded, not that the host is healthy. Log patterns are triage counts, not diagnoses.
+Run this JavaScript with Node.js in a shell or sandbox; return only its summaries, never raw subprocess output. `ok` means execution and analysis succeeded, not that the host is healthy. Log patterns are triage counts, not diagnoses.
 
 ```javascript
 const { spawnSync } = require("node:child_process");
@@ -101,11 +102,11 @@ function logEvidence(text) {
 }
 ```
 
-Pass a whitelisting analyzer to `emit`, or `logEvidence` for counts. When `stderrChars` > 0, inspect stderr in sandbox and classify warnings before concluding; diagnostics can contain secrets. Empty/unrecognized output is not healthy. On timeout, overflow, or parse failure, narrow that probe and finish unaffected checks.
+Pass a whitelisting analyzer to `emit`, or `logEvidence` for counts. When `stderrChars` > 0, inspect stderr privately and classify warnings before concluding; diagnostics can contain secrets. Empty/unrecognized output is not healthy. On timeout, overflow or parse failure, narrow that probe and finish unaffected checks.
 
-Do not hand-interpolate multi-line shell/regex code into JSON args for `ctx_execute`; quotes or newlines break parsing. Use single-line commands, stdin/heredocs in the sandbox, or `eval` with JSON serialization.
+Use scripts or stdin/heredocs for complex shell/regex code; serialize tool arguments with a JSON library, never hand-interpolate multiline JSON.
 
-On Windows, invoke binaries directly with local `cwd` in `spawnSync`; Context-Mode's `cwd` applies to shell mode. Launch success does not prove remote success.
+Set working directories explicitly in shell/subprocess tools. On Windows, invoke binaries directly with `cwd` in `spawnSync`. Launch success does not prove remote success.
 ## Discover once
 
 For broad audits, batch hostname, `/etc/os-release`, `id`, `sudo -n true`, interface addresses, routes, uptime, init system (`systemctl is-system-running 2>/dev/null || rc-status 2>/dev/null`), and package/firewall/container tools. For a named repair, collect only the required subset. Preserve sudo probe exit status. Detect Proxmox via `pveversion`; virtualization alone does not make a node Proxmox. For multi-node tasks, inspect configured controller inventory first to establish topology before target probes.

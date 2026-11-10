@@ -8,7 +8,7 @@ const lines = skill.trimEnd().split("\n").length;
 const bytes = Buffer.byteLength(source);
 const estimatedTokens = Math.ceil(skill.length / 4);
 
-test("frontmatter exposes a valid model-invoked skill", () => {
+test("frontmatter exposes a valid explicit-only skill", () => {
   const header = skill.match(/^---\n([\s\S]*?)\n---\n/);
   assert.ok(header, "Missing YAML frontmatter delimiters");
   const fields = Object.fromEntries(header[1].split("\n").map(line => {
@@ -20,7 +20,7 @@ test("frontmatter exposes a valid model-invoked skill", () => {
   assert.equal(fields.name, "server-ops");
   assert.ok(fields.description?.length > 0, "Missing trigger description");
   assert.ok(fields.description.length <= 220, "Description exceeds discovery budget");
-  assert.notEqual(fields["disable-model-invocation"], "true");
+  assert.equal(fields["disable-model-invocation"], "true");
 });
 
 test("loaded skill stays within explicit size limits", () => {
@@ -49,4 +49,12 @@ test("description excludes single-host commands and routing keeps safeguards", (
   }
   assert.match(route, /lockout-prone SSH\/firewall\/network changes/);
   assert.ok(route.indexOf("lockout-prone") < route.indexOf("skip the rest"), "High-risk work must bypass the fast path");
+});
+
+test("procedures do not require harness-specific sandbox or background-job APIs", async () => {
+  const brain = await readFile(new URL("../skills/ansible-brain/SKILL.md", import.meta.url), "utf8");
+  for (const procedure of [skill, brain]) {
+    assert.doesNotMatch(procedure, /ctx_execute|Context-Mode|bg_N|timeout: 0/);
+  }
+  assert.match(skill, /owner-only temporary stdout\/stderr files/);
 });

@@ -13,7 +13,7 @@ npm test
 npm run smoke
 ```
 
-`npm test` checks discoverable frontmatter, size limits, and absence of companion skill or Markdown dependencies. Behavioral tests execute the actual JavaScript from `SKILL.md` against real child processes. They cover bounded log summaries, diagnostic secrecy, expected nonzero statuses, native SMART bit combinations, analyzer-failure isolation, timeouts, and buffer overflow.
+`npm test` checks explicit-only frontmatter, size limits, no skill-URI or Markdown dependencies, and safe command-pack exports. Behavioral tests execute the actual JavaScript from both procedures against real child processes or local fixtures. They cover bounded log summaries, diagnostic secrecy, nonzero statuses, every SMART exit-byte value, analyzer failure/null results, timeouts, overflow, and synchronous/asynchronous cleanup.
 
 The size limits are 220 lines, 16,000 UTF-8 bytes, and a 4,000-token estimate based on characters divided by four. The estimate is not a model tokenizer count or a billing measurement.
 
@@ -33,7 +33,7 @@ The optional remote smoke runs only `hostname`, `uname -s`, and `uname -r` throu
 
 ## Review before installation
 
-The repository does not install skills, change OMP configuration, uninstall marketplace packages, or publish to GitHub. Each skill's `SKILL.md` is its complete procedure.
+The repository does not install into active harness profiles or change their configuration. Each canonical `SKILL.md` is a procedure, not a portable activation gate. Explicit invocation requires the matching adapter below.
 
 1. Review both skill files, including repair authority, backup boundaries, SSH trust, dependency inspection and cleanup limits.
 2. Check real homelab cases before cutover:
@@ -42,8 +42,8 @@ The repository does not install skills, change OMP configuration, uninstall mark
    - SMART: preserve native health/history bit combinations without treating command/access failures as readable diagnostics. `ok` means analysis succeeded, not that the disk is healthy.
    - Stale host libraries: check long-lived hypervisor QEMU mappings after host package updates; verify mapped libraries before and after approved guest restarts.
    - Automation scope: inspect full play/import graphs before Ansible runs; `--limit` restricts target hosts, not action scope.
-3. When installation is approved, install two sibling directories in the active OMP skill discovery root: this directory as `server-ops`, and `skills/ansible-brain/` separately as `ansible-brain`. Do not rely on discovery recursing into `server-ops/skills/`.
-4. Check competing marketplace/router triggers before cutover. Do not leave two procedures eligible and mistake duplicate loading for a result of this skill.
+3. Export the matching explicit-command pack into a new directory. Review it before any installation; do not copy bare canonical procedures into automatic skill-discovery roots.
+4. Disable or remove older automatically discoverable copies before claiming explicit-only operation. Negative descriptions alone do not enforce activation rules.
 5. Retain the prior installed package until cutover and rollback are clear.
 
 ## Compare completed work
@@ -77,3 +77,47 @@ Runs require a working temporary venv, Python-compatible pinned dependencies/col
 Remote teardown must explicitly stop owned work, clean target temp paths and close sockets before deleting run directories. The embedded awaited Node helper removes only local files after job settlement; it does not clean remote hosts or handle signals. Disconnects, SIGKILL and power loss can leave state requiring recovery. Git is not a remote-data backup or automatic rollback.
 
 `tests/ansible-brain.test.mjs` executes the shipped helper for sync/async success/failure and pending work, parses concrete JSON/JSONL records, and checks policy separately. `npm test` runs it; these local tests do not prove remote cleanup, forwarding or ProxyJump behavior.
+
+## Portable explicit commands
+
+Priority: AGY, Codex, OMP, Pi, then Claude Code. Generate wrappers, not an OMP-only extension:
+
+```powershell
+node scripts/export-commands.mjs --harness omp --out C:/temp/server-ops-omp
+```
+
+Choose `agy`, `codex`, `omp`, `pi`, or `claude`. The destination must not exist. Export does not install anything, merge settings, or overwrite existing data. Wrappers reference this checkout's absolute procedure paths; keep the checkout or regenerate after moving it.
+
+Strict mode requires explicit opt-in even for multi-host requests; host count alone never activates these procedures.
+
+| Harness | Exported layout | Explicit invocation |
+|---|---|---|
+| AGY CLI | `manual/server-ops.md`, `manual/ansible-brain.md` | Manually ask `agy --print` to read the chosen prompt and handle your request. No native slash-command claim. |
+| Codex | `.agents/skills/<name>/` with `agents/openai.yaml` setting `policy.allow_implicit_invocation: false` | `$server-ops`, `$ansible-brain`; literal `/name` is not supported. |
+| OMP | `.omp/prompts/<name>.md` | `/server-ops`, `/ansible-brain`; prompt templates do not auto-match. |
+| Pi | `.pi/agent/prompts/<name>.md` (user layout) | Install the reviewed templates into `~/.pi/agent/prompts`; invoke `/server-ops` or `/ansible-brain`. |
+| Claude Code | `.claude/skills/<name>/SKILL.md` with `disable-model-invocation: true` | `/server-ops`, `/ansible-brain`. |
+
+AGY CLI has no confirmed strict-only native skill control. Its export deliberately contains no discoverable `SKILL.md` or deprecated IDE workflow. Use the manual prompt instead:
+
+```powershell
+agy --add-dir "C:/path/to/server-ops-skills" --print "Read C:/temp/server-ops-agy/manual/server-ops.md and handle: audit the named hosts."
+```
+
+When launching outside the checkout, grant read scope with `--add-dir` as shown; AGY denied canonical-file reads without it during verification. Keep normal permission checks enabled.
+
+For isolated strict OMP testing, launch the exported project with `--no-skills`; its prompt commands remain available without an automatic skill catalog. Do not treat previously installed global skills as disabled merely because a new pack exists.
+
+Wrappers instruct the assistant to ask for missing targets/scope before reading a full procedure. That conversational ordering is model-guided: OMP read the procedure before asking on a bare explicit command during testing. Explicit invocation still authorizes loading; no deterministic argument-validation gate is claimed. Ordinary single-host user/log work stays outside these commands, including on Proxmox. Explicit `server-ops` invocation authorizes its helper handoff for a scoped multi-host write. These discovery controls are not a filesystem sandbox and do not govern an assistant outside the wrappers.
+
+Native behavior references: [AGY skills](https://www.antigravity.google/docs/skills.md), [Codex skills](https://developers.openai.com/codex/skills), [OMP prompts](https://omp.sh/docs/prompt-templates), [Pi prompts](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/prompt-templates.md), [Claude skills](https://code.claude.com/docs/en/skills).
+
+### Verification boundary
+
+- AGY CLI 1.4.6: both manual wrappers read their intended canonical files successfully with normal permissions; a simple single-host user/log request read neither procedure. Missing scope caused a question without reading a full procedure.
+- OMP 18.18.6: both explicit commands loaded their intended procedures with automatic skills disabled. Separate ordinary single-host user/log requests read neither procedure. Bare explicit-command scope ordering has the limit above.
+- Codex 0.167.0: the real local app-server discovered both exported skills without parse errors. A model turn failed with missing authentication (401).
+- Pi 0.73.1: the real installed template loader discovered both commands, expanded arguments, and left ordinary text unchanged. A model turn stopped because no API key/login was available.
+- Claude Code 2.1.322: the real command registry listed both exported commands. A model turn stopped with `Not logged in`.
+
+Codex, Pi and Claude model-backed invocation remains blocked until the user authenticates each harness locally. No credentials were copied between harnesses. Export tests validate all five formats and no-overwrite behavior; they are not a substitute for authenticated model runs.
